@@ -1,0 +1,10 @@
+{
+  // Deploys ./dist as a static-asset Worker. Static asset requests are free
+  // and unlimited on Cloudflare, including the Free plan.
+  "name": "catronin",
+  "compatibility_date": "2026-09-24",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page"
+  }
+}

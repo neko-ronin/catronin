@@ -1,0 +1,16 @@
+{
+  "name": "catronin",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "three": "latest"
+  },
+  "devDependencies": {
+    "vite": "latest"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  }
+}

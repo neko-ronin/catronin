@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Catronin — WebGL work and visual experiments</title>
+<meta name="description" content="A workshop of browser-rendered experiments: WebGL scenes, interface studies, and deliberately fictional marketing pages.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<header class="site wrap">
+  <span class="wordmark">Catronin</span>
+  <nav>
+    <a href="#work">Work</a>
+    <a href="#lab">Lab</a>
+    <a href="#contact">Contact</a>
+  </nav>
+</header>
+
+<div class="hero">
+  <canvas id="hero-canvas"></canvas>
+  <div class="wrap">
+    <h1>Rendering light, glass <em>and weight</em> in a browser.</h1>
+    <p class="lede">A workshop of WebGL scenes and interface studies — plus a shelf of
+    marketing pages built for products that do not exist, which is where the craft gets
+    honest.</p>
+  </div>
+</div>
+
+<section id="work">
+  <div class="wrap">
+    <h2>Selected work</h2>
+    <div class="grid">
+      <a class="card" href="#work">
+        <span class="tag">WebGL</span>
+        <h3>Volumetric field</h3>
+        <p>Raymarched noise, real-time. Frame budget held under 16 ms on integrated graphics.</p>
+      </a>
+      <a class="card" href="#work">
+        <span class="tag">WebGL</span>
+        <h3>Instanced city</h3>
+        <p>Twenty thousand instances, one draw call, procedurally varied down to the window light.</p>
+      </a>
+      <a class="card" href="#work">
+        <span class="tag">Interaction</span>
+        <h3>Glass shader study</h3>
+        <p>Refraction, dispersion and a believable scratch pass. Written to be readable, not clever.</p>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section id="lab">
+  <div class="wrap">
+    <h2>Lab — deliberately fictional brands</h2>
+    <div class="grid">
+      <a class="card" href="/labs/fieldnote/">
+        <span class="tag">Product page</span>
+        <h3>Fieldnote</h3>
+        <p>A complete SaaS marketing page for a product that does not exist. Layout, pricing, voice.</p>
+      </a>
+      <a class="card" href="/labs/">
+        <span class="tag">Index</span>
+        <h3>All experiments</h3>
+        <p>Everything in progress, including the ones that will not survive the week.</p>
+      </a>
+      <div class="card">
+        <span class="tag">Note</span>
+        <h3>Why fake brands</h3>
+        <p>Real clients constrain copy. Invented ones let you practise the whole surface unchecked.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="site wrap" id="contact">
+  <span>Catronin — catronin.com</span>
+  <span>Built with three.js · hosted on Cloudflare</span>
+</footer>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
