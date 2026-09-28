@@ -182,8 +182,7 @@ function App() {
               <span className="hero-word inline-block">Ronin<span className="baseline-probe" /></span>
             </h1>
             <p className="mt-8 max-w-[38ch] text-xl leading-snug">
-              A one-eyed cat wandering between ink and light — drawing on paper by day, growing
-              glass specimens in real-time 3D by night.
+              Gated layers of ink & vectors.
             </p>
           </div>
           <figure ref={art} className="hero-art m-0 lg:col-span-7">
