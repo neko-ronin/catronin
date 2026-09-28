@@ -32,7 +32,7 @@ function setWorld(next, origin, commit) {
     root.dataset.world = next
     flushSync(commit)
   })
-  vt.ready.catch(() => {}) // skipped (e.g. a hidden tab): the switch itself still ran
+  vt.ready.catch(() => { }) // skipped (e.g. a hidden tab): the switch itself still ran
 }
 
 function useNight(artRef) {
@@ -190,7 +190,7 @@ function App() {
             <img src="/art/ronin-and-companion.webp" width="1920" height="1280" fetchPriority="high"
               alt="Cat Ronin, a one-eyed grey tabby in a mustard beanie and red plaid shirt, greets a fluffy white companion holding a brass compass and an old field book." />
             <figcaption className="night-only text-sm text-muted">
-              The Goddess Egg’s prismatic silk, from the Orbius light lab, rendered live with {live?.backend}{live?.hasSky ? ' and vgpu' : ''}. Move the cursor; scroll to turn it.
+              The Goddess Egg incubates, from the Orbius light lab, rendered live with {live?.backend}{live?.hasSky ? ' and vgpu' : ''}.
             </figcaption>
           </figure>
         </section>
@@ -204,15 +204,13 @@ function App() {
             <h2 className="font-display text-[clamp(3rem,6vw,5rem)] font-bold uppercase leading-[0.9]">Field notes</h2>
             <div className="mt-8 max-w-[52ch] space-y-5 text-lg leading-relaxed">
               <p>
-                A ronin is a samurai without a master. This one is a cat — a borrowed sword, a
-                yellow beanie pulled low, and a companion who has never once lost the compass.
+                A ronin is a Frankenheimer film that serves the best car chase scene in cinema history. This one is a cat.
               </p>
               <p>
-                The trail runs two ways. On paper it is ink, drawn line by line: the ronin and his
-                friend. On the GPU it is shaders and particles, teaching glass, coral and light to
+                The trail runs two ways. On paper it is ink, drawn line by line: On the GPU it is shaders and particles, teaching glass, coral and light to
                 hold still like objects with weight in the hand.
               </p>
-              <p className="text-muted">The page is a specimen too. It arrives on paper, and it only lights up if your browser can carry it.</p>
+              <p className="text-muted">The page is a specimen too. It arrives on paper, and only drinks compute if your browser can spare it.</p>
             </div>
           </div>
         </section>
@@ -222,7 +220,8 @@ function App() {
           <a href="https://orbius.catronin.com/" className="mt-6 block max-w-3xl no-underline">
             <span className="font-display text-[clamp(3rem,8vw,6.5rem)] font-bold uppercase leading-none underline decoration-accent decoration-4 underline-offset-8">Orbius</span>
             <span className="mt-4 block text-lg text-muted">
-              A light laboratory for the browser — particle simulations, ray-marched orbs and glass vessels, with shaders that recompile as you type.
+              Web toy from the slop cannon, if you ask me. Tasteful though, as far as web toys go.
+              UX oddities and bugs aside, play with it. Press all the buttons. Save composition to browser collections or to local disk.
             </span>
           </a>
         </section>
