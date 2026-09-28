@@ -187,10 +187,12 @@ function App() {
             </p>
           </div>
           <figure ref={art} className="hero-art m-0 lg:col-span-7">
-            <img src="/art/ronin-and-companion.webp" width="1920" height="1280" fetchPriority="high"
-              alt="Cat Ronin, a one-eyed grey tabby in a mustard beanie and red plaid shirt, greets a fluffy white companion holding a brass compass and an old field book." />
+            <div className="photo-frame photo-frame--hero">
+              <img src="/art/ronin-and-companion.webp" width="1920" height="1280" fetchPriority="high"
+                alt="Cat Ronin, a one-eyed grey tabby in a mustard beanie and red plaid shirt, greets a fluffy white companion holding a brass compass and an old field book." />
+            </div>
             <figcaption className="night-only text-sm text-muted">
-              The Goddess Egg incubates, from the Orbius light lab, rendered live with {live?.backend}{live?.hasSky ? ' and vgpu' : ''}.
+              The Prismatic Egg incubates, from the Orbius light lab, rendered live with {live?.backend}{live?.hasSky ? ' and vgpu' : ''}.
             </figcaption>
           </figure>
         </section>
@@ -198,8 +200,12 @@ function App() {
         <Specimens />
 
         <section id="field-notes" className="wrap grid gap-12 py-28 lg:grid-cols-12">
-          <img src="/art/ronin-yosemite.webp" loading="lazy" width="1122" height="1402" className="field-photo w-full lg:col-span-5"
-            alt="Cat Ronin from behind, in a mustard beanie and red flannel with a loaded backpack, looking out at Half Dome at sunset." />
+          <figure className="field-frame-wrap m-0 w-full lg:col-span-5">
+            <div className="photo-frame photo-frame--portrait photo-frame--tape-right">
+              <img src="/art/ronin-yosemite.webp" loading="lazy" width="1122" height="1402" className="field-photo w-full"
+                alt="Cat Ronin from behind, in a mustard beanie and red flannel with a loaded backpack, looking out at Half Dome at sunset." />
+            </div>
+          </figure>
           <div className="self-center lg:col-span-6 lg:col-start-7">
             <h2 className="font-display text-[clamp(3rem,6vw,5rem)] font-bold uppercase leading-[0.9]">Field notes</h2>
             <div className="mt-8 max-w-[52ch] space-y-5 text-lg leading-relaxed">

@@ -110,18 +110,120 @@
   color: transparent;
 }
 
-/* Hero art is ink on parchment; at night the live specimen takes its place. */
-.hero-art img {
+/* ── Photo frames ── a responsive mat + ink border that is part of the photo's
+   box, so any responsive resize or transform moves frame and photo as one.
+   Sizing uses clamp() so the mat, tape and shadow scale with the viewport. */
+.photo-frame {
+  --frame-mat: clamp(8px, 1.4vw + 6px, 18px);
+  --frame-tape-w: clamp(54px, 9vw + 20px, 110px);
+  --frame-tape-h: clamp(16px, 1.6vw + 10px, 28px);
+  position: relative;
+  padding: var(--frame-mat);
+  background: color-mix(in srgb, var(--bg) 86%, var(--fg));
+  border: 1.5px solid var(--fg);
+  border-radius: 3px;
+  box-shadow:
+    0 1px 0 rgba(42, 35, 31, 0.25),
+    clamp(5px, 1.2vw, 10px) clamp(5px, 1.2vw, 10px) 0 rgba(42, 35, 31, 0.16);
+  transition: transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.6s ease, background-color 0.8s ease, border-color 0.8s ease;
+}
+.photo-frame img {
+  display: block;
   width: 100%;
   height: auto;
+  border: 1px solid var(--rule);
+  border-radius: 1px;
+  background: var(--bg);
+}
+/* Inner hairline inside the mat: drawn on the wrapper so it scales with it. */
+.photo-frame::after {
+  content: '';
+  position: absolute;
+  inset: calc(var(--frame-mat) / 2.6);
+  border: 1px solid color-mix(in srgb, var(--fg) 14%, transparent);
+  border-radius: 2px;
+  pointer-events: none;
+}
+/* Washi tape on the top corner: sized with clamp() + vw so it stays proportional. */
+.photo-frame::before {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  top: calc(var(--frame-tape-h) / -2.2);
+  left: 8%;
+  width: var(--frame-tape-w);
+  height: var(--frame-tape-h);
+  background: color-mix(in srgb, var(--gold) 82%, white);
+  opacity: 0.9;
+  transform: rotate(-4deg);
+  box-shadow: 0 1px 2px rgba(42, 35, 31, 0.25);
+  clip-path: polygon(2% 0, 98% 4%, 100% 96%, 0 100%);
+}
+.photo-frame--tape-right::before {
+  left: auto;
+  right: 8%;
+  transform: rotate(4deg);
+}
+@media (hover: hover) {
+  .photo-frame:hover {
+    transform: translateY(-4px) rotate(-0.35deg);
+  }
+}
+.photo-frame:focus-within {
+  transform: translateY(-4px) rotate(-0.35deg);
+}
+
+/* Hero art is ink on parchment; at night the live WebGL specimen takes its
+   place, so the hero framing hides completely (layout preserved, chrome gone). */
+.hero-art {
+  position: relative;
+  margin: 0;
+}
+.hero-art .photo-frame img {
   mix-blend-mode: multiply;
   transition: opacity 0.6s ease;
 }
-[data-world='night'] .hero-art img {
+[data-world='night'] .hero-art .photo-frame img {
   opacity: 0;
 }
-.hero-art {
-  position: relative;
+[data-world='night'] .hero-art .photo-frame {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  pointer-events: none;
+}
+[data-world='night'] .hero-art .photo-frame img {
+  border-color: transparent;
+  background: transparent;
+}
+[data-world='night'] .hero-art .photo-frame::after,
+[data-world='night'] .hero-art .photo-frame::before {
+  display: none;
+}
+@media (hover: hover) {
+  [data-world='night'] .hero-art .photo-frame:hover {
+    transform: none;
+  }
+}
+/* Field photo keeps its expedition-print mat in both worlds, including night. */
+[data-world='night'] .photo-frame--portrait {
+  background: rgba(18, 19, 27, 0.72);
+  border-color: color-mix(in srgb, var(--fg) 26%, transparent);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.45),
+    0 18px 50px rgba(0, 0, 0, 0.45),
+    0 0 28px rgba(230, 178, 90, 0.1);
+  pointer-events: auto;
+}
+[data-world='night'] .photo-frame--portrait img {
+  border-color: color-mix(in srgb, var(--fg) 18%, transparent);
+  background: transparent;
+}
+[data-world='night'] .photo-frame--portrait::after {
+  border-color: color-mix(in srgb, var(--fg) 16%, transparent);
+}
+[data-world='night'] .photo-frame--portrait::before {
+  opacity: 0;
 }
 .night-only {
   display: none;
@@ -135,9 +237,23 @@
   text-align: right;
 }
 
-.field-photo {
+/* Field photo keeps its expedition-print mat in both worlds. */
+.photo-frame--portrait img {
   aspect-ratio: 4 / 5;
   object-fit: cover;
+}
+.field-frame-wrap {
+  margin: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .photo-frame,
+  .hero-art .photo-frame img {
+    transition: none;
+  }
+  .photo-frame:hover,
+  .photo-frame:focus-within {
+    transform: none;
+  }
 }
 
 .world-toggle {
