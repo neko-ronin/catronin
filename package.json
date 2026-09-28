@@ -21,6 +21,7 @@
     "preview": "vite preview",
     "deploy": "vite build && wrangler deploy",
     "login": "wrangler login",
-    "cat": "tools/cat/build.sh"
+    "cat": "tools/cat/build.sh",
+    "test": "node tools/cat/check_aims.mjs"
   }
 }

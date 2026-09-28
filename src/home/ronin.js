@@ -4,6 +4,7 @@
 import * as THREE from 'three/webgpu'
 import { atan, color, float, floor, fract, hash, length, mix, mx_noise_float, normalLocal, positionLocal, sin, smoothstep, step, uv, vec2 } from 'three/tsl'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { createAimLayer } from './aim-layer.js'
 
 // Three flat light bands, like the ink-and-wash drawings.
 let RAMP
@@ -138,22 +139,7 @@ export async function loadRonin(url = '/cat/ronin.glb', { fur = 5, furLength = 0
     const node = gltf.scene.getObjectByName(name.replace('.', '')) ?? gltf.scene.getObjectByName(name)
     if (node) rest.set(name, { node, local: node.quaternion.clone(), world: node.getWorldQuaternion(new THREE.Quaternion()) })
   }
-  const aims = new Map() // bone -> extra rotation, layered on top of the playing clip
-  // Nodes some clip drives (track names are "<node>.<property>"). Aims on any other
-  // bone start from rest each frame, since no clip rewrites them.
-  const animated = new Set(gltf.animations.flatMap((c) => c.tracks.map((t) => t.name.slice(0, t.name.lastIndexOf('.')))))
-  const q = new THREE.Quaternion()
-  const e = new THREE.Euler()
-  const deg = THREE.MathUtils.degToRad
-  function applyAims() {
-    for (const [name, { pitch = 0, yaw = 0, roll = 0 }] of aims) {
-      const r = rest.get(name)
-      if (!r) continue
-      // Blender Z-up -> three Y-up: pitch X->X, roll Y->-Z, yaw Z->Y.
-      q.setFromEuler(e.set(deg(pitch), deg(yaw), deg(-roll), 'YZX'))
-      r.node.quaternion.multiply(r.world.clone().invert().multiply(q).multiply(r.world))
-    }
-  }
+  const aims = createAimLayer(rest)
 
   const mixer = new THREE.AnimationMixer(gltf.scene)
   const clips = Object.fromEntries(gltf.animations.map((c) => [c.name, mixer.clipAction(c)]))
@@ -187,19 +173,14 @@ export async function loadRonin(url = '/cat/ronin.glb', { fur = 5, furLength = 0
     },
     // Advances the clip, then layers aims on top. Bones no clip animates (eye,
     // eyelid) are reset to rest first so their aims do not accumulate.
+    // Advances the clip, then layers the aims on top (see aim-layer.js).
     update(dt) {
-      for (const name of aims.keys()) {
-        const r = rest.get(name)
-        if (r && (!current || !animated.has(r.node.name))) r.node.quaternion.copy(r.local)
-      }
+      aims.undo()
       mixer.update(dt)
-      applyAims()
+      aims.apply()
     },
     // Extra rotation for a bone in character axes, in degrees; null clears it.
-    aim(bone, rotation) {
-      if (rotation) aims.set(bone, rotation)
-      else aims.delete(bone)
-    },
+    aim: (bone, rotation) => aims.set(bone, rotation),
     // Name of the clip playing now (follows `then` hand-offs).
     get clip() {
       return currentName
@@ -209,6 +190,7 @@ export async function loadRonin(url = '/cat/ronin.glb', { fur = 5, furLength = 0
       mixer.stopAllAction()
       current = null
       currentName = null
+      aims.reset()
       for (const { node, local } of rest.values()) node.quaternion.copy(local)
     },
     dispose() {
