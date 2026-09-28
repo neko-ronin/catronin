@@ -117,7 +117,7 @@ function Specimens() {
   const fine = typeof matchMedia !== 'undefined' && matchMedia('(pointer: fine) and (min-width: 900px)').matches
   return (
     <section id="specimens" className="wrap relative z-10 py-28">
-      <h2 className="font-display text-2xl font-semibold uppercase tracking-wide text-muted">Specimens</h2>
+      <h2 className="font-display text-2xl font-semibold uppercase tracking-wide text-muted">Orbography</h2>
       <ul className="mt-6" onPointerLeave={() => setHover(null)}>
         {SPECIMENS.map((s) => (
           <li key={s.slug} className="border-t border-rule last:border-b">
@@ -150,7 +150,7 @@ function App() {
         <a href="/" className="font-display text-xl font-bold uppercase tracking-wide no-underline">Cat Ronin</a>
         <nav className="flex items-center gap-6">
           <a href="#specimens" className="hidden sm:inline">Specimens</a>
-          <a href="#field-notes" className="hidden sm:inline">Field notes</a>
+          <a href="https://orbius.catronin.com/" className="hidden sm:inline">Orbius</a>
           <a href="#lab">Lab</a>
           {live && (
             <button type="button" className="world-toggle" onClick={() => go(world === 'night' ? 'paper' : 'night')}>
@@ -193,25 +193,25 @@ function App() {
             <h2 className="font-display text-[clamp(3rem,6vw,5rem)] font-bold uppercase leading-[0.9]">Field notes</h2>
             <div className="mt-8 max-w-[52ch] space-y-5 text-lg leading-relaxed">
               <p>
-                A ronin is a samurai without a master. This one is a cat, with a borrowed sword, a
-                yellow beanie, and a companion who never loses the compass.
+                A ronin is a samurai without a master. This one is a cat — a borrowed sword, a
+                yellow beanie pulled low, and a companion who has never once lost the compass.
               </p>
               <p>
-                The trail goes two ways. On paper: ink drawings of the ronin and his friend. On the
-                GPU: shaders and particles that try to make glass, coral and light behave like
-                something you could hold.
+                The trail runs two ways. On paper it is ink, drawn line by line: the ronin and his
+                friend. On the GPU it is shaders and particles, teaching glass, coral and light to
+                hold still like objects with weight in the hand.
               </p>
-              <p className="text-muted">This page is itself a specimen — it arrives on paper and lights up only if your browser can carry it.</p>
+              <p className="text-muted">The page is a specimen too. It arrives on paper, and it only lights up if your browser can carry it.</p>
             </div>
           </div>
         </section>
 
         <section id="lab" className="wrap border-t border-rule py-28">
           <h2 className="font-display text-2xl font-semibold uppercase tracking-wide text-muted">Lab</h2>
-          <a href="/labs/fieldnote/" className="mt-6 block max-w-3xl no-underline">
-            <span className="font-display text-[clamp(3rem,8vw,6.5rem)] font-bold uppercase leading-none underline decoration-accent decoration-4 underline-offset-8">Fieldnote</span>
+          <a href="https://orbius.catronin.com/" className="mt-6 block max-w-3xl no-underline">
+            <span className="font-display text-[clamp(3rem,8vw,6.5rem)] font-bold uppercase leading-none underline decoration-accent decoration-4 underline-offset-8">Orbius</span>
             <span className="mt-4 block text-lg text-muted">
-              A complete product page for a field-inspection app that doesn’t exist — voice, layout and pricing, practised on an invented brand.
+              A light laboratory for the browser — particle simulations, ray-marched orbs and glass vessels, with shaders that recompile as you type.
             </span>
           </a>
         </section>
