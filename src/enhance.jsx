@@ -19,6 +19,9 @@ export function canEnhance() {
 export const whenIdle = (fn) =>
   window.requestIdleCallback ? window.requestIdleCallback(fn, { timeout: 2500 }) : setTimeout(fn, 300)
 
+// Ends the current task so input and paint can run between chunks of startup work.
+export const yieldToMain = () => (globalThis.scheduler?.yield ? scheduler.yield() : new Promise((r) => setTimeout(r)))
+
 // Cross-fades a poster into a live canvas once its first frame is drawn.
 // `load` resolves to a module exporting `mount(el, onFirstFrame) => Promise<{ dispose }>`.
 export function Enhance({ load, poster, className = '' }) {
@@ -54,7 +57,9 @@ export function Enhance({ load, poster, className = '' }) {
 }
 
 // three.js renderer lifecycle: resize, pause offscreen, first-frame signal.
-export async function createRenderer(THREE, el, onFirstFrame, frame) {
+// `warm(renderer)`, if given, finishes before the first frame may draw: compile
+// shaders there, or the first frames stall building them.
+export async function createRenderer(THREE, el, onFirstFrame, frame, warm) {
   const renderer = new THREE.WebGPURenderer({ antialias: true, alpha: true })
   await renderer.init() // WebGPU, or a WebGL 2 backend when WebGPU is missing
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
@@ -69,6 +74,7 @@ export async function createRenderer(THREE, el, onFirstFrame, frame) {
   resize()
   const ro = new ResizeObserver(resize)
   ro.observe(el)
+  await warm?.(renderer)
 
   let first = true
   let running = false

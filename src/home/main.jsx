@@ -1,4 +1,5 @@
 import { StrictMode, useCallback, useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
 import { canEnhance, whenIdle } from '../enhance.jsx'
 import './home.css'
@@ -15,15 +16,23 @@ const SPECIMENS = [
 // The companion's compass in the hero illustration: the night opens from here.
 const COMPASS = { x: 0.685, y: 0.64 }
 
-function setWorld(next, origin) {
+// `commit` is the React side of the switch (the toggle's label). It runs inside the
+// transition, so the old snapshot still shows the old label.
+function setWorld(next, origin, commit) {
   const root = document.documentElement
   if (origin) {
     root.style.setProperty('--iris-x', `${origin[0]}px`)
     root.style.setProperty('--iris-y', `${origin[1]}px`)
   }
-  const apply = () => (root.dataset.world = next)
-  if (document.startViewTransition) document.startViewTransition(apply)
-  else apply() // CSS colour transitions carry the change instead
+  if (!document.startViewTransition) {
+    root.dataset.world = next // CSS colour transitions carry the change instead
+    return commit()
+  }
+  const vt = document.startViewTransition(() => {
+    root.dataset.world = next
+    flushSync(commit)
+  })
+  vt.ready.catch(() => {}) // skipped (e.g. a hidden tab): the switch itself still ran
 }
 
 function useNight(artRef) {
@@ -36,8 +45,7 @@ function useNight(artRef) {
       const r = artRef.current?.getBoundingClientRect()
       const origin = r && r.bottom > 0 ? [r.left + r.width * COMPASS.x, r.top + r.height * COMPASS.y] : [innerWidth / 2, innerHeight / 2]
       live?.setPaused(next === 'paper')
-      setWorld(next, origin)
-      setWorldState(next)
+      setWorld(next, origin, () => setWorldState(next))
     },
     [artRef, live],
   )
@@ -105,7 +113,7 @@ function Follower({ slug }) {
   return (
     <div ref={pane} className={`follower ${slug ? 'is-on' : ''}`} aria-hidden="true">
       {SPECIMENS.map((s) => (
-        <video key={s.slug} src={slug === s.slug ? `/work/${s.slug}.mp4` : undefined} poster={`/work/${s.slug}.webp`}
+        <video key={s.slug} src={slug === s.slug ? `/work/${s.slug}.mp4` : undefined}
           muted loop playsInline autoPlay preload="none" className={slug === s.slug ? 'opacity-100' : 'opacity-0'} />
       ))}
     </div>
@@ -126,7 +134,7 @@ function Specimens() {
                 <span className="font-display text-[clamp(2.5rem,7vw,6rem)] font-bold uppercase leading-[0.9] tracking-tight">{s.name}</span>
                 <span className="max-w-[34ch] text-muted">{s.note}</span>
               </summary>
-              <video className="mb-8 aspect-video w-full max-w-3xl bg-black" src={`/work/${s.slug}.mp4`} poster={`/work/${s.slug}.webp`}
+              <video className="mb-8 aspect-video w-full max-w-3xl bg-black" src={`/work/${s.slug}.mp4`}
                 controls muted loop playsInline preload="none" />
             </details>
           </li>
@@ -140,6 +148,7 @@ function Specimens() {
 function App() {
   const art = useRef(null)
   const { stage, live, world, go } = useNight(art)
+  const [capable] = useState(canEnhance)
 
   return (
     <>
@@ -152,8 +161,10 @@ function App() {
           <a href="#specimens" className="hidden sm:inline">Specimens</a>
           <a href="https://orbius.catronin.com/" className="hidden sm:inline">Orbius</a>
           <a href="#lab">Lab</a>
-          {live && (
-            <button type="button" className="world-toggle" onClick={() => go(world === 'night' ? 'paper' : 'night')}>
+          {/* Laid out from the start and shown once the night is live: arriving
+              later, it made the header taller and pushed the page down. */}
+          {capable && (
+            <button type="button" className={`world-toggle ${live ? '' : 'invisible'}`} onClick={() => go(world === 'night' ? 'paper' : 'night')}>
               {world === 'night' ? 'Back to paper' : 'Light it up'}
             </button>
           )}

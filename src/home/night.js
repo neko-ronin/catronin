@@ -51,6 +51,7 @@ async function mountSky(el) {
   const fx = effect(gpu, skyShader, {
     set: { sky: { time: 0, progress: 0, aspect: 1, center: [0.68, 0.5], pointer: [0, 0] } },
   })
+  await fx.compile({ colors: [target.format] }) // off the GPU's main thread, not in the first frame
   const t = clock(gpu)
   return {
     draw(state) {
@@ -124,11 +125,30 @@ const RISE_FOR = 0.9
 const POP_AT = 1.85
 const POP_FOR = 0.35
 
+// Startup stages as User Timing measures (DevTools' Timings track): a slow start
+// can only be diagnosed from a trace of the visit that was slow.
+function stages(prefix) {
+  let last = performance.now()
+  return (name) => {
+    const now = performance.now()
+    performance.measure(`${prefix}:${name}`, { start: last, end: now })
+    last = now
+  }
+}
+
 export async function mount(el, onFirstFrame) {
+  const step = stages('night')
+  // The model is the biggest download: fetch it while everything else is built.
+  const roninLoad = loadRonin('/cat/ronin.glb', { fur: 4 }).catch((err) => {
+    console.warn('[night] ronin unavailable:', err)
+    return null
+  })
+
   let sky = await mountSky(el).catch((err) => {
     console.warn('[night] vgpu sky unavailable, continuing without it:', err)
     return null
   })
+  step('sky')
 
   const layer = document.createElement('div')
   layer.style.cssText = 'position:absolute;inset:0'
@@ -140,6 +160,7 @@ export async function mount(el, onFirstFrame) {
   camera.updateMatrixWorld()
   const { group, core, brain, map } = makeSpecimen()
   scene.add(group)
+  step('specimen')
 
   // The hero title as physical letters, and Cat Ronin sitting on them. Either can
   // fail on its own (fonts, a missing file) and the rest of the scene carries on.
@@ -152,12 +173,9 @@ export async function mount(el, onFirstFrame) {
     scene.add(title.group)
     document.documentElement.dataset.text3d = ''
   }
-  const ronin =
-    title &&
-    (await loadRonin('/cat/ronin.glb', { fur: 4 }).catch((err) => {
-      console.warn('[night] ronin unavailable:', err)
-      return null
-    }))
+  step('title')
+  const ronin = title && (await roninLoad)
+  step('ronin')
   const cast = ronin && createDirector(ronin)
   if (ronin) {
     ronin.object.visible = false
@@ -235,6 +253,7 @@ export async function mount(el, onFirstFrame) {
   let openAt = null // set on the first frame after the night opens
   let wantOpen = false
   let now = 0
+  let pmrem = null
   const handle = await createRenderer(THREE, layer, onFirstFrame, (t, { w, h }) => {
     if (paused) return
     const dt = Math.min(0.1, t - now)
@@ -286,12 +305,30 @@ export async function mount(el, onFirstFrame) {
       window.__captureNext = null
       take([...el.querySelectorAll('canvas')])
     }
+  }, async (renderer) => {
+    step('renderer')
+    renderer.shadowMap.enabled = true
+    pmrem = new THREE.PMREMGenerator(renderer)
+    scene.environment = pmrem.fromScene(nightEnvironment(), 0.04).texture
+    step('environment')
+    // Build every shader now, in small async steps, rather than in the first
+    // frames: the Ronin's too, which otherwise build the moment he pops on.
+    if (ronin) ronin.object.visible = true
+    await renderer.compileAsync(scene, camera).catch((err) => console.warn('[night] precompile failed, shaders build on first draw:', err))
+    step('compile')
+    // compileAsync skips shadow passes and three's own passes (output, mipmaps); one
+    // frame on the still-hidden stage builds those. They compile on the GPU process's
+    // main thread, stalling every frame until done, so wait them out here: the
+    // opening must not start on a stalled compositor. The Orbius draw comes first:
+    // its WebGL pipeline builds on first draw too, and the frame's texture upload
+    // waits on it, so the same wait covers both.
+    brain.render(0)
+    renderer.render(scene, camera)
+    if (ronin) ronin.object.visible = false
+    if (renderer.backend.isWebGPUBackend) await renderer.backend.device.queue.onSubmittedWorkDone()
+    step('warm')
   })
-  handle.renderer.shadowMap.enabled = true
   if (import.meta.env.DEV) window.__night = { THREE, scene, camera, title, ronin } // console debugging only
-
-  const pmrem = new THREE.PMREMGenerator(handle.renderer)
-  scene.environment = pmrem.fromScene(nightEnvironment(), 0.04).texture
 
   return {
     backend: handle.backend,
