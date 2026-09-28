@@ -1,7 +1,7 @@
 // Cat Lab: preview Cat Ronin and every clip with the exact materials the site uses.
 import * as THREE from 'three/webgpu'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { loadRonin } from '../../src/home/ronin.js'
+import { BONES, loadRonin } from '../../src/home/ronin.js'
 
 const stage = document.getElementById('stage')
 const renderer = new THREE.WebGPURenderer({ antialias: true, alpha: true })
@@ -42,26 +42,14 @@ const speed = document.getElementById('speed')
 const stats = document.getElementById('stats')
 stats.textContent = `${renderer.backend.isWebGPUBackend ? 'WebGPU' : 'WebGL 2'} · ${ronin.clips.length} clips`
 
-// ── Pose tool. Same convention as tools/cat/build_cat.py: degrees about the
-//    character's axes. Blender Z-up -> three Y-up: pitch X->X, roll Y->-Z, yaw Z->Y.
-const BONES = ['root', 'hips', 'spine', 'head', 'ear.L', 'ear.R', 'eye.L', 'upper_arm.L', 'forearm.L', 'upper_arm.R', 'forearm.R', 'leg.L', 'leg.R', 'tail.1', 'tail.2', 'tail.3']
-const rest = new Map() // bone -> { local, world } rest quaternions, relative to the model root
-ronin.object.updateMatrixWorld(true)
-for (const name of BONES) {
-  const node = ronin.bone(name)
-  if (node) rest.set(name, { node, local: node.quaternion.clone(), world: node.getWorldQuaternion(new THREE.Quaternion()) })
-}
+// ── Pose tool: sliders drive ronin.aim(), the same character-axis layer the site
+//    uses, so a pose copied from here bakes identically in Blender.
 const pose = Object.fromEntries(BONES.map((b) => [b, { pitch: 0, yaw: 0, roll: 0 }]))
-const deg = THREE.MathUtils.degToRad
 function applyPose() {
-  for (const [name, { node, local, world }] of rest) {
-    const { pitch, yaw, roll } = pose[name]
-    const r = new THREE.Quaternion().setFromEuler(new THREE.Euler(deg(pitch), deg(yaw), deg(-roll), 'YZX'))
-    node.quaternion.copy(local).multiply(world.clone().invert()).multiply(r).multiply(world)
-  }
+  for (const [bone, v] of Object.entries(pose)) ronin.aim(bone, v.pitch || v.yaw || v.roll ? v : null)
 }
 const bonePick = document.getElementById('bone')
-bonePick.innerHTML = [...rest.keys()].map((b) => `<option>${b}</option>`).join('')
+bonePick.innerHTML = BONES.map((b) => `<option>${b}</option>`).join('')
 const sliders = ['pitch', 'yaw', 'roll'].map((k) => document.getElementById(k))
 const snippet = document.getElementById('snippet')
 const posing = document.getElementById('posing')
@@ -109,7 +97,7 @@ resize()
 const clock = new THREE.Clock()
 renderer.setAnimationLoop(() => {
   const dt = clock.getDelta()
-  if (!posing.checked) ronin.update(dt * Number(speed.value))
+  ronin.update(dt * Number(speed.value))
   if (spin.checked) ronin.object.rotation.y += dt * 0.6
   controls.update()
   renderer.render(scene, camera)

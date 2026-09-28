@@ -47,13 +47,24 @@ function knit(base) {
   const rib = smoothstep(-0.4, 0.4, sin(atan(p.z, p.x).mul(64)))
   return color(base).mul(rib.mul(0.16).add(0.84))
 }
+// Iris: dark olive rim to a bright yellow-green centre, with fine radial
+// striations. glTF puts the iris's face in its local XY plane.
+function iris() {
+  const p = positionLocal
+  const r = length(p.xy).div(0.066)
+  const fibres = sin(atan(p.y, p.x).mul(34)).mul(0.06).add(0.97)
+  return mix(color('#58651a'), color('#e4e56e'), smoothstep(0.98, 0.4, r)).mul(fibres)
+}
 // Shell fur: layer h of n is the surface pushed out along its normals and cut
 // into strands. Each uv cell holds one strand that tapers as it rises.
 function shell(base, h, len, stripes) {
   const m = new THREE.MeshToonNodeMaterial({ gradientMap: RAMP })
   const cell = uv().mul(vec2(320, 160))
-  const r = hash(floor(cell))
-  const d = length(fract(cell).sub(0.5))
+  const id = floor(cell)
+  const r = hash(id)
+  // Each strand sits off-centre in its cell, so the strands never line up in a grid.
+  const jitter = vec2(hash(id.add(vec2(17.3, 3.1))), hash(id.add(vec2(5.7, 41.9)))).sub(0.5).mul(0.55)
+  const d = length(fract(cell).sub(0.5).sub(jitter))
   m.positionNode = positionLocal.add(normalLocal.mul(h * len))
   m.opacityNode = step(float(h * 0.9), r).mul(step(d, float(0.5 * (1 - h))))
   m.alphaTest = 0.5
@@ -61,8 +72,9 @@ function shell(base, h, len, stripes) {
   return m
 }
 const FUR = /^fur/
+export const BONES = ['root', 'hips', 'spine', 'head', 'ear.L', 'ear.R', 'eye.L', 'lid.L', 'upper_arm.L', 'forearm.L', 'upper_arm.R', 'forearm.R', 'leg.L', 'leg.R', 'tail.1', 'tail.2', 'tail.3']
 
-const NO_OUTLINE = /whisker|iris|pupil|mouth|tongue|fang|nose|strap|scar/
+const NO_OUTLINE = /whisker|iris|pupil|catchlight|mouth|philtrum|lash|nose|strap|scar/
 const OUTLINE = 0.012 // world-ish units; the ink line weight
 
 // `fur` is the shell count: 0 for flat toon, ~5 for the full look.
@@ -91,6 +103,7 @@ export async function loadRonin(url = '/cat/ronin.glb', { fur = 5, furLength = 0
       if (src.name === 'flannel') m.map = flannel
       else if (src.name === 'fur') m.colorNode = tabby(base)
       else if (src.name === 'beanie') m.colorNode = knit(base)
+      else if (src.name === 'iris') m.colorNode = iris()
       else m.color = src.color
       toon.set(src.name, m)
     }
@@ -114,6 +127,32 @@ export async function loadRonin(url = '/cat/ronin.glb', { fur = 5, furLength = 0
     const hull = new THREE.Mesh(o.geometry, ink)
     hull.name = `${o.name}.outline`
     o.add(hull)
+  }
+
+  // Rest orientation of every bone, relative to the model: the frame that
+  // character-axis rotations (pitch/yaw/roll) are measured in. Same convention as
+  // tools/cat/build_cat.py, so a pose from the lab bakes identically.
+  gltf.scene.updateMatrixWorld(true)
+  const rest = new Map()
+  for (const name of BONES) {
+    const node = gltf.scene.getObjectByName(name.replace('.', '')) ?? gltf.scene.getObjectByName(name)
+    if (node) rest.set(name, { node, local: node.quaternion.clone(), world: node.getWorldQuaternion(new THREE.Quaternion()) })
+  }
+  const aims = new Map() // bone -> extra rotation, layered on top of the playing clip
+  // Nodes some clip drives (track names are "<node>.<property>"). Aims on any other
+  // bone start from rest each frame, since no clip rewrites them.
+  const animated = new Set(gltf.animations.flatMap((c) => c.tracks.map((t) => t.name.slice(0, t.name.lastIndexOf('.')))))
+  const q = new THREE.Quaternion()
+  const e = new THREE.Euler()
+  const deg = THREE.MathUtils.degToRad
+  function applyAims() {
+    for (const [name, { pitch = 0, yaw = 0, roll = 0 }] of aims) {
+      const r = rest.get(name)
+      if (!r) continue
+      // Blender Z-up -> three Y-up: pitch X->X, roll Y->-Z, yaw Z->Y.
+      q.setFromEuler(e.set(deg(pitch), deg(yaw), deg(-roll), 'YZX'))
+      r.node.quaternion.multiply(r.world.clone().invert().multiply(q).multiply(r.world))
+    }
   }
 
   const mixer = new THREE.AnimationMixer(gltf.scene)
@@ -144,11 +183,26 @@ export async function loadRonin(url = '/cat/ronin.glb', { fur = 5, furLength = 0
         mixer.addEventListener('finished', done)
       }
     },
-    update: (dt) => mixer.update(dt),
+    // Advances the clip, then layers aims on top. Bones no clip animates (eye,
+    // eyelid) are reset to rest first so their aims do not accumulate.
+    update(dt) {
+      for (const name of aims.keys()) {
+        const r = rest.get(name)
+        if (r && (!current || !animated.has(r.node.name))) r.node.quaternion.copy(r.local)
+      }
+      mixer.update(dt)
+      applyAims()
+    },
+    // Extra rotation for a bone in character axes, in degrees; null clears it.
+    aim(bone, rotation) {
+      if (rotation) aims.set(bone, rotation)
+      else aims.delete(bone)
+    },
     // Stops every clip and returns to the bind pose (the lab's pose tool starts here).
     stop() {
       mixer.stopAllAction()
       current = null
+      for (const { node, local } of rest.values()) node.quaternion.copy(local)
     },
     dispose() {
       mixer.stopAllAction()

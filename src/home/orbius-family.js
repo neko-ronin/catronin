@@ -1,11 +1,10 @@
-// Steve Boltzman's brain, rendered by Orbius's own exported shader (see
-// scripts/export-boltzman.mjs) in a small offscreen WebGL 2 context. The canvas
-// is then used as a live texture inside the three.js glass.
-import bundle from './boltzman.bundle.json'
+// Renders an Orbius shader family (exported by scripts/export-orbius.mjs) with
+// Orbius's own GLSL in a small offscreen WebGL 2 context. The canvas is then used
+// as a live texture inside the three.js glass.
 
 // Orbius writes linear HDR; its composite pass applies exposure and this curve.
-// Alpha = brightest channel, so the dark background vanishes under additive blending.
-const fragment =
+// Alpha = brightest channel, so empty background is discarded by the card.
+const wrap = (bundle) =>
   bundle.fragment.replace('void main()', 'void orbiusMain()') +
   `
 uniform float uExposure;
@@ -15,21 +14,22 @@ function compile(gl, type, source) {
   const shader = gl.createShader(type)
   gl.shaderSource(shader, source)
   gl.compileShader(shader)
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw Error(`Boltzman shader: ${gl.getShaderInfoLog(shader)}`)
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw Error(`Orbius shader: ${gl.getShaderInfoLog(shader)}`)
   return shader
 }
 
-export function createBoltzman(size = 512) {
+export function createOrbiusFamily(bundle, size = 512) {
+  const fragment = wrap(bundle)
   const canvas = document.createElement('canvas')
   canvas.width = canvas.height = size
   const gl = canvas.getContext('webgl2', { premultipliedAlpha: true, antialias: false })
-  if (!gl) throw Error('Boltzman needs WebGL 2')
+  if (!gl) throw Error('Orbius families need WebGL 2')
 
   const program = gl.createProgram()
   gl.attachShader(program, compile(gl, gl.VERTEX_SHADER, bundle.vertex))
   gl.attachShader(program, compile(gl, gl.FRAGMENT_SHADER, fragment))
   gl.linkProgram(program)
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw Error(`Boltzman link: ${gl.getProgramInfoLog(program)}`)
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw Error(`Orbius link: ${gl.getProgramInfoLog(program)}`)
   gl.useProgram(program)
   gl.bindVertexArray(gl.createVertexArray()) // fullscreen triangle from gl_VertexID
 

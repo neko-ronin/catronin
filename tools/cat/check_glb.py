@@ -19,7 +19,8 @@ mats = {m["name"] for m in gltf.get("materials", [])}
 
 missing = {
     "clips": want_clips - have_clips,
-    "bones": {"root", "head", "eye.L", "upper_arm.L", "tail.3"} - nodes,
+    "bones": {"root", "head", "eye.L", "lid.L", "upper_arm.L", "tail.3"} - nodes,
+    "face": {"eyelid", "lash", "mouth.L", "mouth.R", "iris", "pupil", "catchlight"} - nodes,
     "materials": {"fur", "flannel", "beanie", "iris", "ink", "hakama"} - mats,
 }
 problems = {k: sorted(v) for k, v in missing.items() if v}

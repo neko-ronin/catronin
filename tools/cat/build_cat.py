@@ -8,8 +8,10 @@ import json
 import math
 import sys
 
+import bmesh
 import bpy
 from mathutils import Euler, Vector
+from mathutils.bvhtree import BVHTree
 
 argv = sys.argv[sys.argv.index("--") + 1 :]
 CLIPS_PATH, OUT_PATH = argv[0], argv[1]
@@ -26,6 +28,7 @@ PALETTE = {
     "pink": (0.93, 0.55, 0.58),
     "mouth": (0.45, 0.10, 0.12),
     "scar": (0.85, 0.45, 0.48),
+    "leather": (0.055, 0.045, 0.045),
     "eye_white": (0.97, 0.96, 0.90),
     "iris": (0.80, 0.82, 0.35),
     "ink": (0.05, 0.05, 0.06),
@@ -84,6 +87,54 @@ def limb(name, mat, p0, p1, r0, r1=None):
     return finish(o, name, mat)
 
 
+def tube(name, mat, points, radius, taper=None):
+    """A smooth ink stroke: a bevelled Bezier curve through points, as a mesh.
+    taper: per-point radius multipliers (ends thinner, like a brush stroke)."""
+    curve = bpy.data.curves.new(name, "CURVE")
+    curve.dimensions = "3D"
+    curve.bevel_depth = radius
+    curve.bevel_resolution = 2
+    curve.resolution_u = 8
+    curve.use_fill_caps = True
+    spline = curve.splines.new("BEZIER")
+    spline.bezier_points.add(len(points) - 1)
+    for i, (bp, p) in enumerate(zip(spline.bezier_points, points)):
+        bp.co = p
+        bp.handle_left_type = bp.handle_right_type = "AUTO"
+        bp.radius = taper[i] if taper else 1.0
+    tmp = bpy.data.objects.new(name + "_curve", curve)
+    scene.collection.objects.link(tmp)
+    bpy.context.view_layer.update()
+    mesh = bpy.data.meshes.new_from_object(tmp.evaluated_get(bpy.context.evaluated_depsgraph_get()))
+    bpy.data.objects.remove(tmp)
+    obj = bpy.data.objects.new(name, mesh)
+    scene.collection.objects.link(obj)
+    return finish(obj, name, mat)
+
+
+def on_surface(objs, x, z, lift=0.003):
+    """Where a ray from straight in front hits the front-most of objs, pulled
+    out by `lift`: lets ink features be drawn onto the face, not float near it."""
+    bpy.context.view_layer.update()
+    dg = bpy.context.evaluated_depsgraph_get()
+    best = None
+    for o in objs:
+        tree = BVHTree.FromObject(o, dg)
+        inv = o.matrix_world.inverted()
+        hit, *_ = tree.ray_cast(inv @ Vector((x, -2.0, z)), (inv.to_3x3() @ Vector((0, 1, 0))).normalized())
+        if hit is not None:
+            w = o.matrix_world @ hit
+            if best is None or w.y < best.y:
+                best = w
+    if best is None:
+        raise ValueError(f"no surface at x={x} z={z}")
+    return best + Vector((0, -lift, 0))
+
+
+def stroke(name, mat, objs, xz, radius, taper=None, lift=0.003):
+    return tube(name, mat, [on_surface(objs, x, z, lift) for x, z in xz], radius, taper)
+
+
 # ── Skeleton. Blender is Z-up; he faces -Y, so his left is +X.
 BONES = {
     # name: (head, tail, parent)
@@ -93,7 +144,8 @@ BONES = {
     "head": ((0, 0, 1.05), (0, 0, 1.55), "spine"),
     "ear.L": ((0.24, 0, 1.62), (0.38, 0, 1.84), "head"),
     "ear.R": ((-0.24, 0, 1.62), (-0.38, 0, 1.84), "head"),
-    "eye.L": ((0.11, -0.2, 1.33), (0.11, -0.3, 1.33), "head"),  # the open eye; tracks the pointer later
+    "eye.L": ((0.12, -0.26, 1.34), (0.12, -0.36, 1.34), "head"),  # the open eye; the site aims it at the pointer
+    "lid.L": ((0.12, -0.26, 1.34), (0.12, -0.26, 1.44), "head"),  # upper eyelid; the site blinks it
     "upper_arm.L": ((0.22, 0, 0.98), (0.34, -0.02, 0.8), "spine"),
     "forearm.L": ((0.34, -0.02, 0.8), (0.42, -0.06, 0.62), "upper_arm.L"),
     "upper_arm.R": ((-0.22, 0, 0.98), (-0.34, -0.02, 0.8), "spine"),
@@ -126,46 +178,87 @@ def part(bone, obj):
     return obj
 
 
-# Head: wide at the cheeks, scruffy tufts, a big fanged grin (after the ink drawing)
+# Head: wide at the cheeks with scruffy tufts (after the ink drawing)
 part("head", sphere("head", "fur", (0, 0, 1.3), 0.3, (1.14, 1.0, 0.9)))
 for side, sx in (("L", 1), ("R", -1)):
     for i, (dz, length) in enumerate(((0.02, 0.14), (-0.06, 0.12), (-0.13, 0.09))):  # cheek tufts
         tip = (0.43 * sx, -0.08 - i * 0.02, 1.2 + dz - length * 0.4)
         part("head", limb(f"cheek_tuft.{side}{i}", "fur_light" if i else "fur", (0.26 * sx, -0.1, 1.22 + dz), tip, 0.05, 0.0))
-part("head", sphere("muzzle", "fur_light", (0, -0.235, 1.2), 0.12, (1.4, 0.75, 0.75)))
-part("head", sphere("chin", "fur_light", (0, -0.2, 1.1), 0.09, (1.3, 0.8, 0.6)))
-part("head", sphere("nose", "pink", (0, -0.33, 1.255), 0.03, (1.35, 0.8, 0.8)))
-# Open grin: dark mouth, tongue, two fangs
-part("head", sphere("mouth", "mouth", (0, -0.3, 1.15), 0.07, (1.5, 0.45, 0.75)))
-part("head", sphere("tongue", "pink", (0, -0.315, 1.125), 0.04, (1.3, 0.4, 0.55)))
+# Muzzle: two whisker pads, a triangular nose, and a closed cat "w" mouth
 for sx in (1, -1):
-    part("head", cone(f"fang{sx}", "eye_white", (0.045 * sx, -0.33, 1.17), 0.014, 0.0, 0.035, rot=(math.radians(180), 0, 0)))
+    part("head", sphere(f"whisker_pad{sx}", "fur_light", (0.055 * sx, -0.25, 1.2), 0.085, (1.0, 0.72, 0.78)))
+part("head", sphere("chin", "fur_light", (0, -0.21, 1.13), 0.075, (1.2, 0.8, 0.6)))
+nose = cone("nose", "pink", (0, -0.33, 1.25), 0.034, 0.0, 0.03, rot=(math.radians(90), 0, 0), verts=3)
+nose.rotation_euler = (math.radians(-90), math.radians(180), 0)  # point down, flat face forward
+nose.scale = (1.4, 1.0, 1.0)
+part("head", nose)
+# Mouth, drawn onto the muzzle: philtrum, then a closed "w" with a slight smirk
+# (his left side curls higher).
+muzzle = [o for o, _ in PARTS if o.name.startswith(("whisker_pad", "chin"))]
+part("head", stroke("philtrum", "ink", muzzle, [(0, 1.236), (0, 1.215), (0, 1.196)], 0.0055))
+part("head", stroke("mouth.L", "ink", muzzle, [(0, 1.196), (0.022, 1.182), (0.046, 1.186), (0.068, 1.203)], 0.0055, [1, 1, 0.9, 0.45]))
+part("head", stroke("mouth.R", "ink", muzzle, [(0, 1.196), (-0.022, 1.183), (-0.043, 1.187), (-0.058, 1.196)], 0.0055, [1, 1, 0.9, 0.45]))
 for side, sx in (("L", 1), ("R", -1)):
     ear = cone(f"ear.{side}", "fur", (0.31 * sx, 0.0, 1.74), 0.14, 0.0, 0.32, rot=(math.radians(-8), math.radians(36 * sx), 0))
     part(f"ear.{side}", ear)
     inner = cone(f"ear_inner.{side}", "pink", (0.31 * sx, -0.055, 1.73), 0.085, 0.0, 0.22, rot=(math.radians(-8), math.radians(36 * sx), 0))
     part(f"ear.{side}", inner)
     for i, dz in enumerate((0.03, 0.0, -0.03)):  # whiskers, fanned
-        w = limb(f"whisker.{side}{i}", "ink", (0.12 * sx, -0.29, 1.2 + dz), (0.42 * sx, -0.24, 1.2 + dz * 3.5), 0.004)
+        w = limb(f"whisker.{side}{i}", "ink", (0.12 * sx, -0.29, 1.2 + dz), (0.44 * sx, -0.23, 1.2 + dz * 3.5), 0.0045, 0.0007)
         part("head", w)
 
-# Eye (his left, +X): big, yellow-green, slit pupil. Eyepatch over his right.
-part("head", sphere("eye_white", "eye_white", (0.12, -0.262, 1.34), 0.085, (1.0, 0.55, 1.1)))
-part("eye.L", sphere("iris", "iris", (0.12, -0.3, 1.34), 0.058, (1.0, 0.42, 1.0)))
-part("eye.L", sphere("pupil", "ink", (0.12, -0.322, 1.34), 0.03, (0.3, 0.3, 1.35)))
-bpy.ops.mesh.primitive_cylinder_add(vertices=32, radius=0.1, depth=0.03, location=(-0.115, -0.3, 1.34), rotation=(math.radians(90), 0, math.radians(-12)))
-part("head", finish(bpy.context.object, "eyepatch", "ink"))
-# Strap: a great circle from the patch diagonally up across the forehead, under the
-# beanie on the far side. Its lower half runs behind the head, out of view.
-patch, over = Vector((-0.11, -0.3, 0.05)), Vector((0.25, -0.12, 0.2))
-strap = torus("eyepatch_strap", "ink", (0, 0, 1.3), 0.325, 0.013)
-strap.rotation_mode = "QUATERNION"
-strap.rotation_quaternion = Vector((0, 0, 1)).rotation_difference(patch.cross(over).normalized())
-strap.scale = (1.09, 1.09, 1.09)
-part("head", strap)
-# Old scars around the patch
-part("head", limb("scar.0", "scar", (-0.2, -0.26, 1.44), (-0.26, -0.2, 1.3), 0.007))
-part("head", limb("scar.1", "scar", (-0.04, -0.3, 1.25), (0.0, -0.3, 1.31), 0.006))
+# Eye (his left, +X): big yellow-green iris (radial shader on the site), slit
+# pupil, two catchlights, and a fur lid with an ink lash line that flicks out at
+# the corner. Lid geometry is analytic so the lash can follow its edge exactly.
+EYE = Vector((0.12, -0.262, 1.34))
+part("head", sphere("eye_white", "eye_white", tuple(EYE), 0.082, (1.0, 0.55, 1.08)))
+part("eye.L", sphere("iris", "iris", (0.12, -0.298, 1.34), 0.066, (1.0, 0.42, 1.0)))
+part("eye.L", sphere("pupil", "ink", (0.12, -0.324, 1.34), 0.034, (0.28, 0.3, 1.3)))
+part("eye.L", sphere("catchlight", "eye_white", (0.098, -0.333, 1.362), 0.013, (1.0, 0.4, 1.0)))
+part("eye.L", sphere("catchlight_small", "eye_white", (0.14, -0.331, 1.318), 0.006, (1.0, 0.4, 1.0)))
+LID_R, LID_CUT, LID_TILT, LID_SCALE = 0.09, 0.055, math.radians(10), Vector((1.05, 0.8, 1.1))
+bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16, radius=LID_R, location=tuple(EYE))
+lid = bpy.context.object
+bm = bmesh.new()
+bm.from_mesh(lid.data)
+bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.co.z < LID_CUT], context="VERTS")  # keep the top cap
+bm.to_mesh(lid.data)
+bm.free()
+lid.scale = LID_SCALE
+lid.rotation_euler = (LID_TILT, 0, 0)  # tipped forward over the top of the eye
+part("lid.L", finish(lid, "eyelid", "fur"))
+
+
+def lid_edge(theta, grow=1.03):
+    rho = math.sqrt(LID_R**2 - LID_CUT**2)
+    local = Vector((rho * math.cos(theta), rho * math.sin(theta), LID_CUT))
+    local = Vector((local.x * LID_SCALE.x, local.y * LID_SCALE.y, local.z * LID_SCALE.z)) * grow
+    return EYE + Euler((LID_TILT, 0, 0)).to_matrix() @ local
+
+
+lash = [lid_edge(math.radians(a)) for a in (196, 222, 250, 278, 306, 334)]
+lash.append(lash[-1] + Vector((0.03, 0.004, 0.016)))  # the flick at the outer corner
+part("lid.L", tube("lash", "ink", lash, 0.0075, [0.4, 0.9, 1, 1, 1, 0.9, 0.25]))
+bpy.ops.mesh.primitive_cylinder_add(vertices=32, radius=0.092, depth=0.03, location=(-0.115, -0.3, 1.34), rotation=(math.radians(90), 0, math.radians(-12)))
+part("head", finish(bpy.context.object, "eyepatch", "leather"))
+# Strap: two strokes on the head's surface, traced by angle around the head
+# (azimuth from the front toward his left, elevation up), both disappearing
+# under the beanie. A full ring would have to dip below the cheek at the back.
+HEAD_C, HEAD_R = Vector((0, 0, 1.3)), Vector((0.342, 0.3, 0.27)) * 1.03
+
+
+def on_head(az, el):
+    a, e = math.radians(az), math.radians(el)
+    d = Vector((math.cos(e) * math.sin(a), -math.cos(e) * math.cos(a), math.sin(e)))
+    return HEAD_C + Vector((d.x * HEAD_R.x, d.y * HEAD_R.y, d.z * HEAD_R.z))
+
+
+part("head", tube("eyepatch_strap.front", "leather", [on_head(az, el) for az, el in ((-10, 16), (8, 25), (30, 33), (48, 38))], 0.012))
+part("head", tube("eyepatch_strap.side", "leather", [on_head(az, el) for az, el in ((-38, 8), (-70, 11), (-105, 19), (-140, 32))], 0.012))
+# Old scars on his patch side: two scratches drawn onto the head
+head_mesh = [o for o, _ in PARTS if o.name == "head"]
+part("head", stroke("scar.0", "scar", head_mesh, [(-0.2, 1.425), (-0.235, 1.365), (-0.268, 1.295)], 0.006, [0.3, 1, 0.3]))
+part("head", stroke("scar.1", "scar", head_mesh, [(-0.228, 1.43), (-0.262, 1.372), (-0.292, 1.31)], 0.005, [0.3, 1, 0.3]))
 
 # Beanie: slouchy knit crown tipped back, thick folded cuff (ribs come from the shader)
 beanie = sphere("beanie", "beanie", (0, 0.05, 1.54), 0.31, (1.1, 1.08, 1.08))
@@ -226,10 +319,23 @@ for obj, bone in PARTS:
 #      yaw   = about the vertical axis (turn to look)
 #      roll  = about the front-to-back axis (tilt, raise an arm out sideways)
 #    "lift" moves the bone up, in metres (root only in practice).
-#    channel: [[frame, value], ...] keys, eased between; or {"sin": [amp, cycles, phase]}
+#    channel: [[frame, value], ...] keys, eased between; or {"sin": [amp, cycles, phase, offset?]}
 #    sampled over the clip so loops close exactly.
+#    "base": another clip whose tracks this one inherits, channel by channel, so a
+#    gesture can be layered on a pose ("sit_present" = "present" on "sit").
 #    The lab (tools/cat/lab.js) uses the same convention, so poses copy across.
 clips = json.load(open(CLIPS_PATH))
+by_name = {c["name"]: c for c in clips}
+
+
+def resolved_tracks(clip):
+    if "base" not in clip:
+        return clip["tracks"]
+    tracks = {bone: dict(ch) for bone, ch in resolved_tracks(by_name[clip["base"]]).items()}
+    for bone, channels in clip["tracks"].items():
+        tracks.setdefault(bone, {}).update(channels)
+    return tracks
+
 rig.animation_data_create()
 for pb in rig.pose.bones:
     pb.rotation_mode = "QUATERNION"
@@ -237,8 +343,8 @@ for pb in rig.pose.bones:
 
 def value_at(channel, f, length):
     if isinstance(channel, dict):
-        amp, cycles, phase = channel["sin"]
-        return amp * math.sin(2 * math.pi * (cycles * f / length + phase))
+        amp, cycles, phase, *offset = channel["sin"]
+        return amp * math.sin(2 * math.pi * (cycles * f / length + phase)) + (offset[0] if offset else 0)
     if f <= channel[0][0]:
         return channel[0][1]
     for (f0, v0), (f1, v1) in zip(channel, channel[1:]):
@@ -266,7 +372,7 @@ for clip in clips:
     for pb in rig.pose.bones:  # every clip starts from rest
         pb.location = (0, 0, 0)
         pb.rotation_quaternion = (1, 0, 0, 0)
-    for bone, channels in clip["tracks"].items():
+    for bone, channels in resolved_tracks(clip).items():
         pb = rig.pose.bones[bone]
         up = pb.bone.matrix_local.to_3x3().inverted() @ Vector((0, 0, 1))
         for f in range(length + 1):  # every frame: the exporter samples per frame anyway
@@ -277,7 +383,7 @@ for clip in clips:
             if "lift" in v:
                 pb.location = up * v["lift"]
                 pb.keyframe_insert("location", frame=f)
-    print(f"clip {name}: {length} frames, {len(clip['tracks'])} bones")
+    print(f"clip {name}: {length} frames, {len(resolved_tracks(clip))} bones")
 rig.animation_data.action = None
 
 bpy.ops.export_scene.gltf(

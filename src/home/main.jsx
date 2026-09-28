@@ -164,7 +164,9 @@ function App() {
         <section className="wrap grid min-h-[calc(100svh-88px)] items-center gap-8 pb-16 lg:grid-cols-12">
           <div className="lg:col-span-5">
             <h1 className="font-display text-[clamp(5rem,15vw,13.5rem)] font-black uppercase leading-[0.8] tracking-[-0.01em]">
-              Cat<br />Ronin
+              Cat<br />
+              {/* The live ronin sits on this word; night.js reads its box. */}
+              <span id="ronin-word" className="inline-block">Ronin</span>
             </h1>
             <p className="mt-8 max-w-[38ch] text-xl leading-snug">
               A one-eyed cat wandering between ink and light — drawing on paper by day, growing
@@ -175,7 +177,7 @@ function App() {
             <img src="/art/ronin-and-companion.webp" width="1920" height="1280" fetchPriority="high"
               alt="Cat Ronin, a one-eyed grey tabby in a mustard beanie and red plaid shirt, greets a fluffy white companion holding a brass compass and an old field book." />
             <figcaption className="night-only text-sm text-muted">
-              Steve Boltzman, from the Orbius light lab, rendered live with {live?.backend}{live?.hasSky ? ' and vgpu' : ''}. Move the cursor; scroll to turn it.
+              The Goddess Egg’s prismatic silk, from the Orbius light lab, rendered live with {live?.backend}{live?.hasSky ? ' and vgpu' : ''}. Move the cursor; scroll to turn it.
             </figcaption>
           </figure>
         </section>

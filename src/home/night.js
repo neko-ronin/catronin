@@ -3,13 +3,31 @@
 //   specimen: three.js glass dodecahedron with a living core (WebGPU or WebGL 2)
 // Both read one lerped scroll clock (progress 0..1) and a lerped pointer.
 import * as THREE from 'three/webgpu'
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { createRenderer } from '../enhance.jsx'
 import skyShader from './sky.wgsl'
-import { createBoltzman } from './boltzman.js'
+import { createOrbiusFamily } from './orbius-family.js'
+import eggBundle from './goddess-egg.bundle.json'
 import { loadRonin } from './ronin.js'
 
 const LERP = 0.08 // displayed values chase their targets; the "butter"
+
+// What the glass reflects: the night itself, not a lit room. A dark dome, one
+// small warm softbox and a thin ember strip, so facets catch small highlights
+// instead of big white panels.
+function nightEnvironment() {
+  const env = new THREE.Scene()
+  env.background = new THREE.Color('#0b0c12')
+  const light = (w, h, colour, pos) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: colour, side: THREE.DoubleSide }))
+    m.position.set(...pos)
+    m.lookAt(0, 0, 0)
+    env.add(m)
+  }
+  light(1.2, 0.8, '#fff4e0', [-3, 4, 3]) // key softbox, above left
+  light(4, 0.12, '#e6b25a', [4, -1, 2]) // ember strip, low right
+  light(0.5, 2.2, '#9aa6ff', [3, 1, -4]) // cool rim, behind right
+  return env
+}
 
 // Lerped, eased 0..1 for how far the reader has left the hero.
 function smooth(target, shown) {
@@ -45,7 +63,7 @@ async function mountSky(el) {
 function makeSpecimen() {
   const group = new THREE.Group()
 
-  // Optics from the Boltzman shell as saved in Orbius (ior, no dispersion).
+  // Glass optics: Orbius's shell IOR, no dispersion, so the contents stay legible.
   const glass = new THREE.Mesh(
     new THREE.DodecahedronGeometry(1, 0),
     new THREE.MeshPhysicalMaterial({
@@ -55,7 +73,7 @@ function makeSpecimen() {
       ior: 1.4,
       thickness: 0.9,
       clearcoat: 0.3,
-      envMapIntensity: 0.7,
+      envMapIntensity: 1,
       transparent: true,
     }),
   )
@@ -63,11 +81,18 @@ function makeSpecimen() {
   // Lit edges, so the geodesic reads even where the glass is clearest.
   group.add(new THREE.LineSegments(new THREE.EdgesGeometry(glass.geometry), new THREE.LineBasicMaterial({ color: '#f3e6d0', transparent: true, opacity: 0.28 })))
 
-  // The brain is Orbius's own render of "Steve Boltzman", drawn onto a card that
-  // always faces the camera. It is raymarched, so it still turns in real 3D.
-  const brain = createBoltzman(512)
+  // The contents are Orbius's own render of the Goddess Egg's prismatic silk, drawn
+  // onto a card that always faces the camera. It is raymarched, so it still turns
+  // in real 3D.
+  const brain = createOrbiusFamily(eggBundle, 512)
   const map = new THREE.CanvasTexture(brain.canvas)
   map.colorSpace = THREE.SRGBColorSpace
+  // No mipmaps: averaging would melt the silk's one-pixel filaments into flat colour.
+  map.generateMipmaps = false
+  map.minFilter = THREE.LinearFilter
+  // The WebGL canvas holds premultiplied colour (alpha = brightest channel). Upload
+  // it as-is: un-premultiplying would divide by alpha and saturate every faint veil.
+  map.premultiplyAlpha = true
   const core = new THREE.Mesh(
     new THREE.PlaneGeometry(1.3, 1.3),
     // Opaque (empty pixels discarded) so it lands in the pass the glass's
@@ -78,28 +103,28 @@ function makeSpecimen() {
   return { group, core, brain, map }
 }
 
-// What the ronin does, decided once per frame. Idle -> he dozes off; the pointer
-// moving wakes him; otherwise he floats and glances around now and then.
+// What the ronin does, decided once per frame. He sits on the hero's "Ronin";
+// idle -> he dozes off, the pointer moving wakes him, otherwise he glances around.
 function director(ronin) {
   let next = 6 // seconds until the next glance
   let lastMove = 0
   let dozing = false
   return {
-    start: () => ronin.play('present', { fade: 0.6, then: 'float' }),
+    start: () => ronin.play('sit_present', { fade: 0.6, then: 'sit' }),
     moved(t) {
       lastMove = t
       if (dozing) {
         dozing = false
-        ronin.play('lookaround', { then: 'float' })
+        ronin.play('sit_lookaround', { then: 'sit' })
         next = t + 8
       }
     },
     tick(t) {
       if (!dozing && t - lastMove > 25) {
         dozing = true
-        ronin.play('doze', { fade: 1.2 })
+        ronin.play('sit_doze', { fade: 1.2 })
       } else if (!dozing && t > next) {
-        ronin.play('lookaround', { then: 'float' })
+        ronin.play('sit_lookaround', { then: 'sit' })
         next = t + 10 + Math.random() * 8
       }
     },
@@ -130,7 +155,7 @@ export async function mount(el, onFirstFrame) {
   const cast = ronin && director(ronin)
   if (ronin) {
     scene.add(ronin.object, new THREE.HemisphereLight('#c9c3ff', '#2a2433', 0.9))
-    ronin.play('float')
+    ronin.play('sit')
     setTimeout(() => cast.start(), 1200) // after the compass iris has mostly opened
   }
   const key = new THREE.DirectionalLight('#ffe2b0', 1)
@@ -143,6 +168,42 @@ export async function mount(el, onFirstFrame) {
     const max = document.documentElement.scrollHeight - innerHeight
     target.progress = max > 0 ? scrollY / max : 0
   }
+  // Seat: the top of the word "Ronin" in the hero, projected onto the plane he sits in.
+  const word = document.getElementById('ronin-word')
+  const ray = new THREE.Vector3()
+  const toPlane = (px, py, w, h, z) => {
+    ray.set((px / w) * 2 - 1, 1 - (py / h) * 2, 0.5).unproject(camera).sub(camera.position).normalize()
+    return camera.position.clone().addScaledVector(ray, (z - camera.position.z) / ray.z)
+  }
+  const SEAT_HEIGHT = 0.5 // hakama seat above his root, model units
+  const VISIBLE = 1.4 // seat to ear tips, model units
+  const headScreen = new THREE.Vector3()
+  let blinkAt = 3
+  function seatRonin(w, h) {
+    const r = word?.getBoundingClientRect()
+    if (!r || !r.height) return
+    const z = 0.6
+    const ledge = toPlane(r.left + r.width * 0.8, r.top + r.height * 0.1, w, h, z) // over the "IN", clear of "CAT" above
+    const below = toPlane(r.left + r.width * 0.8, r.top + r.height * 1.1, w, h, z)
+    const s = ((ledge.y - below.y) * 1.2) / VISIBLE // as tall above the ledge as the word itself
+    ronin.object.scale.setScalar(s)
+    ronin.object.position.set(ledge.x, ledge.y - SEAT_HEIGHT * s, z)
+    ronin.object.rotation.y = 0.25
+
+    // Eye (and a little of the head) toward the pointer, from where his head is on screen.
+    ronin.bone('head').getWorldPosition(headScreen).project(camera)
+    const px = (target.pointer[0] + 0.5) * 2 - 1
+    const py = 1 - (target.pointer[1] + 0.5) * 2
+    const yaw = THREE.MathUtils.clamp((px - headScreen.x) * 40, -28, 28)
+    const pitch = THREE.MathUtils.clamp(-(py - headScreen.y) * 30, -20, 22)
+    ronin.aim('eye.L', { yaw, pitch })
+    ronin.aim('head', { yaw: yaw * 0.35, pitch: pitch * 0.3 })
+    // Blink every few seconds; the lid also follows the gaze a little.
+    const blinking = now > blinkAt && now < blinkAt + 0.14
+    if (now > blinkAt + 0.14) blinkAt = now + 2.5 + Math.random() * 4
+    ronin.aim('lid.L', { pitch: blinking ? 72 : pitch * 0.5 })
+  }
+
   let now = 0
   const onMove = (e) => {
     target.pointer = [e.clientX / innerWidth - 0.5, e.clientY / innerHeight - 0.5]
@@ -169,13 +230,10 @@ export async function mount(el, onFirstFrame) {
     group.position.set((center[0] - 0.5) * 2 * halfH * camera.aspect, (0.5 - center[1]) * 2 * halfH, 0)
     group.scale.setScalar(Math.min(1, camera.aspect * 0.75) * (1 - away * 0.72))
     group.rotation.set(0.35 + shown.pointer[1] * 0.6 + p * 2.2, t * 0.12 + shown.pointer[0] * 0.8 + p * 3.1, 0)
-    // The ronin keeps to the specimen's left, drifting with it into the corner.
+    // The ronin sits on the hero's "Ronin", measured from the DOM every frame so he
+    // stays put through resizes and scrolling. His eye follows the pointer.
     if (ronin) {
-      const spot = [center[0] - 0.19 * (1 - away * 0.5), center[1] + 0.12 * (1 - away)]
-      const s = Math.min(1, camera.aspect * 0.75) * 0.8 * (1 - away * 0.6)
-      ronin.object.position.set((spot[0] - 0.5) * 2 * halfH * camera.aspect, (0.5 - spot[1]) * 2 * halfH - 0.8 * s, 0.4)
-      ronin.object.scale.setScalar(s)
-      ronin.object.rotation.y = 0.35 + shown.pointer[0] * 0.3
+      seatRonin(w, h)
       ronin.update(Math.min(0.1, t - now))
       cast.tick(t)
     }
@@ -197,7 +255,7 @@ export async function mount(el, onFirstFrame) {
   })
 
   const pmrem = new THREE.PMREMGenerator(handle.renderer)
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
+  scene.environment = pmrem.fromScene(nightEnvironment(), 0.04).texture
 
   return {
     backend: handle.backend,
