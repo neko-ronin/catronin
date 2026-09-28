@@ -3,10 +3,16 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "three": "latest"
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "three": "0.186.1",
+    "vgpu": "0.5.0"
   },
   "devDependencies": {
-    "vite": "latest",
+    "@tailwindcss/vite": "4.3.3",
+    "@vitejs/plugin-react": "6.1.1",
+    "tailwindcss": "4.3.3",
+    "vite": "8.3.1",
     "wrangler": "latest"
   },
   "scripts": {
@@ -14,6 +20,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "vite build && wrangler deploy",
-    "login": "wrangler login"
+    "login": "wrangler login",
+    "cat": "tools/cat/build.sh"
   }
 }
