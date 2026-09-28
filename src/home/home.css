@@ -63,6 +63,17 @@
   visibility: visible;
 }
 
+/* The title's words are rebuilt as 3D letters at night (hero-text.js). The HTML
+   stays in place, selectable and read aloud, with its glyphs made invisible. */
+.baseline-probe {
+  display: inline-block;
+  width: 0;
+  height: 0;
+}
+:root[data-world='night'][data-text3d] .hero-word {
+  color: transparent;
+}
+
 /* Hero art is ink on parchment; at night the live specimen takes its place. */
 .hero-art img {
   width: 100%;

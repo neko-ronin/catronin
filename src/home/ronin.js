@@ -51,7 +51,7 @@ function knit(base) {
 // striations. glTF puts the iris's face in its local XY plane.
 function iris() {
   const p = positionLocal
-  const r = length(p.xy).div(0.066)
+  const r = length(p.xy).div(0.061) // iris radius in tools/cat/build_cat.py
   const fibres = sin(atan(p.y, p.x).mul(34)).mul(0.06).add(0.97)
   return mix(color('#58651a'), color('#e4e56e'), smoothstep(0.98, 0.4, r)).mul(fibres)
 }
@@ -72,7 +72,7 @@ function shell(base, h, len, stripes) {
   return m
 }
 const FUR = /^fur/
-export const BONES = ['root', 'hips', 'spine', 'head', 'ear.L', 'ear.R', 'eye.L', 'lid.L', 'upper_arm.L', 'forearm.L', 'upper_arm.R', 'forearm.R', 'leg.L', 'leg.R', 'tail.1', 'tail.2', 'tail.3']
+export const BONES = ['root', 'hips', 'spine', 'head', 'ear.L', 'ear.R', 'eye.L', 'lid.L', 'upper_arm.L', 'forearm.L', 'upper_arm.R', 'forearm.R', 'thigh.L', 'shin.L', 'thigh.R', 'shin.R', 'tail.1', 'tail.2', 'tail.3']
 
 const NO_OUTLINE = /whisker|iris|pupil|catchlight|mouth|philtrum|lash|nose|strap|scar/
 const OUTLINE = 0.012 // world-ish units; the ink line weight
@@ -158,6 +158,7 @@ export async function loadRonin(url = '/cat/ronin.glb', { fur = 5, furLength = 0
   const mixer = new THREE.AnimationMixer(gltf.scene)
   const clips = Object.fromEntries(gltf.animations.map((c) => [c.name, mixer.clipAction(c)]))
   let current = null
+  let currentName = null
 
   return {
     object: gltf.scene,
@@ -174,6 +175,7 @@ export async function loadRonin(url = '/cat/ronin.glb', { fur = 5, furLength = 0
       next.play()
       if (current) current.crossFadeTo(next, fade, false)
       current = next
+      currentName = name
       if (once && then) {
         const done = (e) => {
           if (e.action !== next) return
@@ -198,10 +200,15 @@ export async function loadRonin(url = '/cat/ronin.glb', { fur = 5, furLength = 0
       if (rotation) aims.set(bone, rotation)
       else aims.delete(bone)
     },
+    // Name of the clip playing now (follows `then` hand-offs).
+    get clip() {
+      return currentName
+    },
     // Stops every clip and returns to the bind pose (the lab's pose tool starts here).
     stop() {
       mixer.stopAllAction()
       current = null
+      currentName = null
       for (const { node, local } of rest.values()) node.quaternion.copy(local)
     },
     dispose() {

@@ -164,9 +164,11 @@ function App() {
         <section className="wrap grid min-h-[calc(100svh-88px)] items-center gap-8 pb-16 lg:grid-cols-12">
           <div className="lg:col-span-5">
             <h1 className="font-display text-[clamp(5rem,15vw,13.5rem)] font-black uppercase leading-[0.8] tracking-[-0.01em]">
-              Cat<br />
-              {/* The live ronin sits on this word; night.js reads its box. */}
-              <span id="ronin-word" className="inline-block">Ronin</span>
+              {/* Each word is rebuilt as physical letters in the night scene
+                  (hero-text.js), measured from these boxes; the probe marks the baseline. */}
+              <span className="hero-word inline-block">Cat<span className="baseline-probe" /></span>
+              <br />
+              <span className="hero-word inline-block">Ronin<span className="baseline-probe" /></span>
             </h1>
             <p className="mt-8 max-w-[38ch] text-xl leading-snug">
               A one-eyed cat wandering between ink and light — drawing on paper by day, growing

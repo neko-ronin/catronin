@@ -104,4 +104,4 @@ renderer.setAnimationLoop(() => {
 })
 
 // Handle for scripted framing and checks from the console or browser automation.
-window.lab = { THREE, scene, camera, controls, ronin }
+window.lab = { THREE, renderer, scene, camera, controls, ronin }

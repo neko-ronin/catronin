@@ -144,14 +144,19 @@ BONES = {
     "head": ((0, 0, 1.05), (0, 0, 1.55), "spine"),
     "ear.L": ((0.24, 0, 1.62), (0.38, 0, 1.84), "head"),
     "ear.R": ((-0.24, 0, 1.62), (-0.38, 0, 1.84), "head"),
-    "eye.L": ((0.12, -0.26, 1.34), (0.12, -0.36, 1.34), "head"),  # the open eye; the site aims it at the pointer
+    # The open eye. Its pivot sits behind the eye, at the eye-white's centre of
+    # curvature, so aiming it slides the iris across the surface like a cartoon
+    # eye instead of swivelling a flat disc in place.
+    "eye.L": ((0.12, -0.147, 1.34), (0.12, -0.247, 1.34), "head"),
     "lid.L": ((0.12, -0.26, 1.34), (0.12, -0.26, 1.44), "head"),  # upper eyelid; the site blinks it
     "upper_arm.L": ((0.22, 0, 0.98), (0.34, -0.02, 0.8), "spine"),
     "forearm.L": ((0.34, -0.02, 0.8), (0.42, -0.06, 0.62), "upper_arm.L"),
     "upper_arm.R": ((-0.22, 0, 0.98), (-0.34, -0.02, 0.8), "spine"),
     "forearm.R": ((-0.34, -0.02, 0.8), (-0.42, -0.06, 0.62), "upper_arm.R"),
-    "leg.L": ((0.12, 0, 0.6), (0.13, 0, 0.08), "hips"),
-    "leg.R": ((-0.12, 0, 0.6), (-0.13, 0, 0.08), "hips"),
+    "thigh.L": ((0.12, 0, 0.6), (0.135, 0, 0.36), "hips"),
+    "shin.L": ((0.135, 0, 0.36), (0.15, 0, 0.08), "thigh.L"),
+    "thigh.R": ((-0.12, 0, 0.6), (-0.135, 0, 0.36), "hips"),
+    "shin.R": ((-0.135, 0, 0.36), (-0.15, 0, 0.08), "thigh.R"),
     "tail.1": ((0, 0.16, 0.62), (0, 0.32, 0.58), "hips"),
     "tail.2": ((0, 0.32, 0.58), (0, 0.46, 0.68), "tail.1"),
     "tail.3": ((0, 0.46, 0.68), (0, 0.52, 0.86), "tail.2"),
@@ -212,9 +217,9 @@ for side, sx in (("L", 1), ("R", -1)):
 # the corner. Lid geometry is analytic so the lash can follow its edge exactly.
 EYE = Vector((0.12, -0.262, 1.34))
 part("head", sphere("eye_white", "eye_white", tuple(EYE), 0.082, (1.0, 0.55, 1.08)))
-part("eye.L", sphere("iris", "iris", (0.12, -0.298, 1.34), 0.066, (1.0, 0.42, 1.0)))
+part("eye.L", sphere("iris", "iris", (0.12, -0.298, 1.34), 0.061, (1.0, 0.42, 1.0)))
 part("eye.L", sphere("pupil", "ink", (0.12, -0.324, 1.34), 0.034, (0.28, 0.3, 1.3)))
-part("eye.L", sphere("catchlight", "eye_white", (0.098, -0.333, 1.362), 0.013, (1.0, 0.4, 1.0)))
+part("eye.L", sphere("catchlight", "eye_white", (0.1, -0.332, 1.36), 0.012, (1.0, 0.4, 1.0)))
 part("eye.L", sphere("catchlight_small", "eye_white", (0.14, -0.331, 1.318), 0.006, (1.0, 0.4, 1.0)))
 LID_R, LID_CUT, LID_TILT, LID_SCALE = 0.09, 0.055, math.radians(10), Vector((1.05, 0.8, 1.1))
 bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16, radius=LID_R, location=tuple(EYE))
@@ -276,10 +281,13 @@ for sx in (1, -1):  # collar points
 part("hips", cone("hakama_waist", "hakama", (0, 0, 0.6), 0.23, 0.2, 0.18))
 part("hips", torus("sash", "sash", (0, 0, 0.68), 0.21, 0.035))
 for side, sx in (("L", 1), ("R", -1)):
-    part(f"leg.{side}", limb(f"hakama_leg.{side}", "hakama", (0.11 * sx, 0, 0.6), (0.16 * sx, 0, 0.14), 0.11, 0.17))
-    part(f"leg.{side}", sphere(f"foot.{side}", "fur", (0.15 * sx, -0.07, 0.06), 0.08, (1.0, 1.35, 0.6)))
+    # Hakama in two pieces with a rounded knee, so the leg can bend over a ledge.
+    part(f"thigh.{side}", limb(f"hakama_thigh.{side}", "hakama", (0.11 * sx, 0, 0.6), (0.135 * sx, 0, 0.34), 0.11, 0.14))
+    part(f"shin.{side}", sphere(f"hakama_knee.{side}", "hakama", (0.135 * sx, 0, 0.36), 0.14))
+    part(f"shin.{side}", limb(f"hakama_shin.{side}", "hakama", (0.135 * sx, 0, 0.38), (0.16 * sx, 0, 0.14), 0.14, 0.17))
+    part(f"shin.{side}", sphere(f"foot.{side}", "fur", (0.15 * sx, -0.07, 0.06), 0.08, (1.0, 1.35, 0.6)))
     for i, dx in enumerate((-0.04, 0.0, 0.04)):  # toes
-        part(f"leg.{side}", sphere(f"toe.{side}{i}", "fur", (0.15 * sx + dx, -0.17, 0.05), 0.028))
+        part(f"shin.{side}", sphere(f"toe.{side}{i}", "fur", (0.15 * sx + dx, -0.17, 0.05), 0.028))
 
 # Arms: rolled, frayed flannel sleeves; grey fur forearms and paws
 for side, sx in (("L", 1), ("R", -1)):
