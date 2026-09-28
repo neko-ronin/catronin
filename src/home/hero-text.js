@@ -8,6 +8,7 @@
 // rather than lit, so the front face keeps the page's exact text colour.
 import * as THREE from 'three/webgpu'
 import { abs, color, mix, normalWorld, smoothstep } from 'three/tsl'
+import { yieldToMain } from '../enhance.jsx'
 
 const F = 384 // tracing resolution, px per em
 const DEPTH = 0.34 // letter depth, em
@@ -170,7 +171,11 @@ export async function createHeroText(elements) {
   Object.assign(shadow, { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4, depthWrite: false })
   const group = new THREE.Group()
 
-  const words = elements.map((el) => {
+  const words = []
+  for (const el of elements) {
+    // Tracing is the heaviest part of the night's start: one word per task, so
+    // the page keeps taking input while it runs.
+    await yieldToMain()
     const { shapes, chars, capTop } = traceWord(el)
     // No geometric bevel: offsetting the outline self-intersects in the N's needle-
     // sharp counters and the cap fills them in. Faces are shaded by direction instead.
@@ -184,8 +189,8 @@ export async function createHeroText(elements) {
     shade.renderOrder = 1
     mesh.add(shade)
     group.add(mesh)
-    return { el, probe: el.querySelector('.baseline-probe'), mesh, chars, capTop, fs: 0 }
-  })
+    words.push({ el, probe: el.querySelector('.baseline-probe'), mesh, chars, capTop, fs: 0 })
+  }
 
   const ro = new ResizeObserver(() => words.forEach((w) => (w.fs = parseFloat(getComputedStyle(w.el).fontSize))))
   words.forEach((w) => ro.observe(w.el))

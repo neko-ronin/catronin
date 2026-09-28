@@ -1,4 +1,4 @@
-@import 'tailwindcss';
+@import 'tailwindcss' source('../'); /* scan src/ only: stray local files must not reach production CSS */
 
 /* Two worlds share one set of tokens: paper (static, default) and night (live GPU). */
 @theme {

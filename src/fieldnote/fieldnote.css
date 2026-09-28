@@ -1,4 +1,4 @@
-@import 'tailwindcss';
+@import 'tailwindcss' source('../'); /* scan src/ only: stray local files must not reach production CSS */
 
 @theme {
   --color-paper: #e9ecdf;
