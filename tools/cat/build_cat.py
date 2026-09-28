@@ -24,6 +24,8 @@ PALETTE = {
     "fur": (0.44, 0.44, 0.45),
     "fur_light": (0.86, 0.84, 0.80),
     "pink": (0.93, 0.55, 0.58),
+    "mouth": (0.45, 0.10, 0.12),
+    "scar": (0.85, 0.45, 0.48),
     "eye_white": (0.97, 0.96, 0.90),
     "iris": (0.80, 0.82, 0.35),
     "ink": (0.05, 0.05, 0.06),
@@ -52,7 +54,7 @@ def finish(obj, name, mat, smooth=True):
     return obj
 
 
-def sphere(name, mat, loc, r, scale=(1, 1, 1), segs=32):
+def sphere(name, mat, loc, r, scale=(1, 1, 1), segs=24):
     bpy.ops.mesh.primitive_uv_sphere_add(segments=segs, ring_count=segs // 2, radius=r, location=loc)
     o = bpy.context.object
     o.scale = scale
@@ -89,8 +91,8 @@ BONES = {
     "hips": ((0, 0, 0.55), (0, 0, 0.75), "root"),
     "spine": ((0, 0, 0.75), (0, 0, 1.05), "hips"),
     "head": ((0, 0, 1.05), (0, 0, 1.55), "spine"),
-    "ear.L": ((0.2, 0, 1.5), (0.32, 0, 1.7), "head"),
-    "ear.R": ((-0.2, 0, 1.5), (-0.32, 0, 1.7), "head"),
+    "ear.L": ((0.24, 0, 1.62), (0.38, 0, 1.84), "head"),
+    "ear.R": ((-0.24, 0, 1.62), (-0.38, 0, 1.84), "head"),
     "eye.L": ((0.11, -0.2, 1.33), (0.11, -0.3, 1.33), "head"),  # the open eye; tracks the pointer later
     "upper_arm.L": ((0.22, 0, 0.98), (0.34, -0.02, 0.8), "spine"),
     "forearm.L": ((0.34, -0.02, 0.8), (0.42, -0.06, 0.62), "upper_arm.L"),
@@ -124,25 +126,34 @@ def part(bone, obj):
     return obj
 
 
-# Head
-part("head", sphere("head", "fur", (0, 0, 1.3), 0.3, (1.12, 1.0, 0.92)))
-part("head", sphere("muzzle", "fur_light", (0, -0.24, 1.21), 0.11, (1.35, 0.75, 0.72)))
-part("head", sphere("nose", "pink", (0, -0.325, 1.255), 0.03, (1.3, 0.8, 0.8)))
-part("head", sphere("mouth", "ink", (0, -0.31, 1.17), 0.035, (1.4, 0.5, 0.5)))
+# Head: wide at the cheeks, scruffy tufts, a big fanged grin (after the ink drawing)
+part("head", sphere("head", "fur", (0, 0, 1.3), 0.3, (1.14, 1.0, 0.9)))
 for side, sx in (("L", 1), ("R", -1)):
-    ear = cone(f"ear.{side}", "fur", (0.27 * sx, 0.0, 1.6), 0.13, 0.0, 0.27, rot=(0, math.radians(34 * sx), 0))
+    for i, (dz, length) in enumerate(((0.02, 0.14), (-0.06, 0.12), (-0.13, 0.09))):  # cheek tufts
+        tip = (0.43 * sx, -0.08 - i * 0.02, 1.2 + dz - length * 0.4)
+        part("head", limb(f"cheek_tuft.{side}{i}", "fur_light" if i else "fur", (0.26 * sx, -0.1, 1.22 + dz), tip, 0.05, 0.0))
+part("head", sphere("muzzle", "fur_light", (0, -0.235, 1.2), 0.12, (1.4, 0.75, 0.75)))
+part("head", sphere("chin", "fur_light", (0, -0.2, 1.1), 0.09, (1.3, 0.8, 0.6)))
+part("head", sphere("nose", "pink", (0, -0.33, 1.255), 0.03, (1.35, 0.8, 0.8)))
+# Open grin: dark mouth, tongue, two fangs
+part("head", sphere("mouth", "mouth", (0, -0.3, 1.15), 0.07, (1.5, 0.45, 0.75)))
+part("head", sphere("tongue", "pink", (0, -0.315, 1.125), 0.04, (1.3, 0.4, 0.55)))
+for sx in (1, -1):
+    part("head", cone(f"fang{sx}", "eye_white", (0.045 * sx, -0.33, 1.17), 0.014, 0.0, 0.035, rot=(math.radians(180), 0, 0)))
+for side, sx in (("L", 1), ("R", -1)):
+    ear = cone(f"ear.{side}", "fur", (0.31 * sx, 0.0, 1.74), 0.14, 0.0, 0.32, rot=(math.radians(-8), math.radians(36 * sx), 0))
     part(f"ear.{side}", ear)
-    inner = cone(f"ear_inner.{side}", "pink", (0.27 * sx, -0.05, 1.59), 0.08, 0.0, 0.19, rot=(0, math.radians(34 * sx), 0))
+    inner = cone(f"ear_inner.{side}", "pink", (0.31 * sx, -0.055, 1.73), 0.085, 0.0, 0.22, rot=(math.radians(-8), math.radians(36 * sx), 0))
     part(f"ear.{side}", inner)
-    for i, dz in enumerate((0.02, -0.02)):  # whiskers
-        w = limb(f"whisker.{side}{i}", "ink", (0.11 * sx, -0.28, 1.2 + dz), (0.36 * sx, -0.25, 1.2 + dz * 3), 0.004)
+    for i, dz in enumerate((0.03, 0.0, -0.03)):  # whiskers, fanned
+        w = limb(f"whisker.{side}{i}", "ink", (0.12 * sx, -0.29, 1.2 + dz), (0.42 * sx, -0.24, 1.2 + dz * 3.5), 0.004)
         part("head", w)
 
-# Eye (his left, +X) and eyepatch (his right, -X)
-part("head", sphere("eye_white", "eye_white", (0.11, -0.265, 1.34), 0.075, (1.0, 0.55, 1.1)))
-part("eye.L", sphere("iris", "iris", (0.11, -0.3, 1.34), 0.045, (1.0, 0.45, 1.0)))
-part("eye.L", sphere("pupil", "ink", (0.11, -0.318, 1.34), 0.022, (0.7, 0.4, 1.2)))
-bpy.ops.mesh.primitive_cylinder_add(vertices=32, radius=0.095, depth=0.03, location=(-0.11, -0.3, 1.34), rotation=(math.radians(90), 0, math.radians(-12)))
+# Eye (his left, +X): big, yellow-green, slit pupil. Eyepatch over his right.
+part("head", sphere("eye_white", "eye_white", (0.12, -0.262, 1.34), 0.085, (1.0, 0.55, 1.1)))
+part("eye.L", sphere("iris", "iris", (0.12, -0.3, 1.34), 0.058, (1.0, 0.42, 1.0)))
+part("eye.L", sphere("pupil", "ink", (0.12, -0.322, 1.34), 0.03, (0.3, 0.3, 1.35)))
+bpy.ops.mesh.primitive_cylinder_add(vertices=32, radius=0.1, depth=0.03, location=(-0.115, -0.3, 1.34), rotation=(math.radians(90), 0, math.radians(-12)))
 part("head", finish(bpy.context.object, "eyepatch", "ink"))
 # Strap: a great circle from the patch diagonally up across the forehead, under the
 # beanie on the far side. Its lower half runs behind the head, out of view.
@@ -152,35 +163,46 @@ strap.rotation_mode = "QUATERNION"
 strap.rotation_quaternion = Vector((0, 0, 1)).rotation_difference(patch.cross(over).normalized())
 strap.scale = (1.09, 1.09, 1.09)
 part("head", strap)
+# Old scars around the patch
+part("head", limb("scar.0", "scar", (-0.2, -0.26, 1.44), (-0.26, -0.2, 1.3), 0.007))
+part("head", limb("scar.1", "scar", (-0.04, -0.3, 1.25), (0.0, -0.3, 1.31), 0.006))
 
-# Beanie: crown + ribbed cuff, pulled over the ears' base
-part("head", sphere("beanie", "beanie", (0, 0.03, 1.49), 0.31, (1.1, 1.05, 1.02)))
-part("head", torus("beanie_cuff", "beanie", (0, 0.01, 1.46), 0.3, 0.05, scale=(1.1, 1.03, 1.0)))
+# Beanie: slouchy knit crown tipped back, thick folded cuff (ribs come from the shader)
+beanie = sphere("beanie", "beanie", (0, 0.05, 1.54), 0.31, (1.1, 1.08, 1.08))
+beanie.rotation_euler = (math.radians(-10), math.radians(6), 0)
+part("head", beanie)
+part("head", torus("beanie_cuff", "beanie", (0, 0.01, 1.5), 0.3, 0.06, scale=(1.1, 1.03, 1.05)))
 
-# Torso in flannel, cream chest tuft
-part("spine", cone("torso", "flannel", (0, 0, 0.88), 0.25, 0.19, 0.42))
-part("spine", sphere("chest_tuft", "fur_light", (0, -0.15, 1.04), 0.07, (1.3, 0.35, 0.8)))
+# Torso: lean flannel shirt, open V collar showing the cream chest
+part("spine", cone("torso", "flannel", (0, 0, 0.88), 0.21, 0.17, 0.44))
+part("spine", cone("chest", "fur_light", (0, -0.155, 0.99), 0.1, 0.0, 0.2, rot=(math.radians(180), 0, 0), verts=3))  # V of the open collar
+for sx in (1, -1):  # collar points
+    part("spine", cone(f"collar{sx}", "flannel", (0.07 * sx, -0.15, 1.06), 0.05, 0.0, 0.1, rot=(math.radians(200), math.radians(-35 * sx), 0), verts=3))
 
 # Hakama: waist, sash, and one wide trouser leg per leg bone
-part("hips", cone("hakama_waist", "hakama", (0, 0, 0.6), 0.26, 0.25, 0.18))
-part("hips", torus("sash", "sash", (0, 0, 0.68), 0.25, 0.035))
+part("hips", cone("hakama_waist", "hakama", (0, 0, 0.6), 0.23, 0.2, 0.18))
+part("hips", torus("sash", "sash", (0, 0, 0.68), 0.21, 0.035))
 for side, sx in (("L", 1), ("R", -1)):
-    part(f"leg.{side}", limb(f"hakama_leg.{side}", "hakama", (0.12 * sx, 0, 0.6), (0.15 * sx, 0, 0.12), 0.12, 0.16))
-    part(f"leg.{side}", sphere(f"foot.{side}", "fur", (0.14 * sx, -0.06, 0.06), 0.08, (1.0, 1.4, 0.6)))
+    part(f"leg.{side}", limb(f"hakama_leg.{side}", "hakama", (0.11 * sx, 0, 0.6), (0.16 * sx, 0, 0.14), 0.11, 0.17))
+    part(f"leg.{side}", sphere(f"foot.{side}", "fur", (0.15 * sx, -0.07, 0.06), 0.08, (1.0, 1.35, 0.6)))
+    for i, dx in enumerate((-0.04, 0.0, 0.04)):  # toes
+        part(f"leg.{side}", sphere(f"toe.{side}{i}", "fur", (0.15 * sx + dx, -0.17, 0.05), 0.028))
 
-# Arms: flannel sleeves, grey paws
+# Arms: rolled, frayed flannel sleeves; grey fur forearms and paws
 for side, sx in (("L", 1), ("R", -1)):
     ua = BONES[f"upper_arm.{side}"]
     fa = BONES[f"forearm.{side}"]
-    part(f"upper_arm.{side}", limb(f"sleeve_upper.{side}", "flannel", ua[0], ua[1], 0.075, 0.07))
-    part(f"forearm.{side}", limb(f"sleeve_lower.{side}", "flannel", fa[0], fa[1], 0.07, 0.078))
-    part(f"forearm.{side}", sphere(f"paw.{side}", "fur", tuple(Vector(fa[1]) + Vector((0, 0, -0.03))), 0.07))
+    part(f"upper_arm.{side}", limb(f"sleeve_upper.{side}", "flannel", ua[0], ua[1], 0.08, 0.08))
+    mid = tuple(Vector(fa[0]).lerp(Vector(fa[1]), 0.45))
+    part(f"forearm.{side}", limb(f"sleeve_cuff.{side}", "flannel", fa[0], mid, 0.08, 0.095))
+    part(f"forearm.{side}", limb(f"forearm_fur.{side}", "fur", mid, fa[1], 0.055, 0.06))
+    part(f"forearm.{side}", sphere(f"paw.{side}", "fur", tuple(Vector(fa[1]) + Vector((0, 0, -0.035))), 0.07))
 
-# Tail
+# Tail: bushy, cream tip
 for i in (1, 2, 3):
     h, t, _ = BONES[f"tail.{i}"]
-    part(f"tail.{i}", limb(f"tail.{i}", "fur", h, t, 0.055 - i * 0.008, 0.05 - i * 0.008))
-part("tail.3", sphere("tail_tip", "fur_light", BONES["tail.3"][1], 0.045))
+    part(f"tail.{i}", limb(f"tail.{i}", "fur", h, t, 0.07 - i * 0.006, 0.065 - i * 0.006))
+part("tail.3", sphere("tail_tip", "fur_light", BONES["tail.3"][1], 0.06))
 
 # Katana, sheathed and tucked in the sash at his left hip
 part("hips", limb("saya", "ink", (0.2, -0.24, 0.72), (0.34, 0.5, 0.52), 0.022))

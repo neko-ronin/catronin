@@ -114,3 +114,6 @@ renderer.setAnimationLoop(() => {
   controls.update()
   renderer.render(scene, camera)
 })
+
+// Handle for scripted framing and checks from the console or browser automation.
+window.lab = { THREE, scene, camera, controls, ronin }

@@ -123,7 +123,7 @@ export async function mount(el, onFirstFrame) {
   scene.add(group)
 
   // Cat Ronin floats beside the specimen. If he fails to load, the scene goes on.
-  const ronin = await loadRonin().catch((err) => {
+  const ronin = await loadRonin('/cat/ronin.glb', { fur: 4 }).catch((err) => {
     console.warn('[night] ronin unavailable:', err)
     return null
   })
