@@ -1,0 +1,33 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-paper: #e9ecdf;
+  --color-sheet: #f3f5ec;
+  --color-ink: #1e2a1b;
+  --color-contour: #8e9a7c;
+  --color-flag: #e0387a;
+  --color-flag-dark: #a8195a;
+  --font-sans: 'Archivo', ui-sans-serif, system-ui, sans-serif;
+  --font-cond: 'Archivo', ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-paper font-sans text-ink antialiased;
+  }
+  a {
+    @apply underline-offset-4 hover:underline;
+  }
+  :focus-visible {
+    @apply outline-3 outline-offset-2 outline-flag;
+  }
+}
+
+@utility font-cond {
+  font-family: var(--font-cond);
+  font-stretch: 68%;
+}
+
+@utility wrap {
+  @apply mx-auto w-full max-w-[1320px] px-4 sm:px-8;
+}
