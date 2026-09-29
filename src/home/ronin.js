@@ -276,9 +276,9 @@ export async function loadRonin(url = '/cat/ronin.glb', { fur = 4, furLength = 0
     o.material = toon.get(src.name)
     if (!meshes.has(o.name)) meshes.set(o.name, o)
     if (!NO_OUTLINE.test(o.name)) outlined.push(o)
-    // The lid is a membrane one strand-length from the eyeball; fur on it just
-    // spears the iris, and it reads as a smooth hood either way.
-    if (fur && /^fur/.test(src.name) && !/^eyelid/.test(o.name)) furred.push(o)
+    // Both lids are membranes one strand-length from the eyeball; fur on them
+    // just spears the iris, and they read as smooth hoods either way.
+    if (fur && /^fur/.test(src.name) && !/^eyelid|^lower_lid/.test(o.name)) furred.push(o)
   })
   // Where the head's fur has to stop: centred on the eyeball, in the head mesh's
   // own local space. The two share a bone, so this offset is fixed for the
@@ -288,7 +288,8 @@ export async function loadRonin(url = '/cat/ronin.glb', { fur = 4, furLength = 0
   const socket = headMesh && meshes.has('eye_white') && (() => {
     const at = meshes.get('eye_white').getWorldPosition(new THREE.Vector3())
     headMesh.worldToLocal(at)
-    return { at: at.toArray(), r0: 0.115, r1: 0.16 }
+    // Wide enough to stay off the whole pressed socket, not just the eyeball.
+    return { at: at.toArray(), r0: 0.14, r1: 0.19 }
   })()
 
   const shells = new Map()

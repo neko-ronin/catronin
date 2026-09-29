@@ -119,6 +119,46 @@ def tube(name, mat, points, radius, taper=None):
     return finish(obj, name, mat)
 
 
+def cap(name, mat, radius, loc, keep, scale, rot=(0, 0, 0), segs=32, ring=16):
+    """A spherical cap: the part of a sphere on one side of `keep` in local z.
+
+    Eyelids are caps, not whole spheres. A full sphere parked over the eye is
+    what makes an eye bulge; a cap that overlaps its edge is what makes it look
+    enclosed."""
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=segs, ring_count=ring, radius=radius, location=loc, rotation=rot)
+    o = bpy.context.object
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    side = 1.0 if keep > 0 else -1.0
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.co.z * side < abs(keep)], context="VERTS")
+    bm.to_mesh(o.data)
+    bm.free()
+    o.scale = scale
+    return o
+
+
+def dish(obj, centre, radius, depth, bias):
+    """Press a shallow socket into a part around `centre`, in the part's own mesh
+    space. `bias` deepens the dish toward -X.
+
+    A socket is not optional decoration here. The face bulges forward along the
+    centreline, so an eye set back into the skull is buried behind the bridge of
+    the nose: the head's surface is 0.051 in front of the eyeball at the eye's
+    inner rim, and occludes the inner 45% of it. No amount of pushing the eye
+    forward fixes that without re-introducing the bulge, so the face has to give.
+    The bias is what makes it an orbit rather than a crater -- shallow at the
+    eye's centre, deepest on the nasal side, which is where a real orbital rim
+    sits."""
+    for v in obj.data.vertices:
+        dx = v.co.x - centre[0]
+        d = (v.co - Vector(centre)).length
+        if d >= radius:
+            continue
+        t = 1.0 - d / radius
+        f = t * t * (3 - 2 * t)
+        v.co = v.co - v.co.normalized() * (depth * f * (1.0 + bias * max(0.0, -dx) / radius))
+
+
 def on_surface(objs, x, z, lift=0.003):
     """Where a ray from straight in front hits the front-most of objs, pulled
     out by `lift`: lets ink features be drawn onto the face, not float near it."""
@@ -247,8 +287,14 @@ def part(bone, obj):
     return obj
 
 
-# Head: wide at the cheeks with scruffy tufts (after the ink drawing)
-part("head", sphere("head", "fur", (0, 0, 1.3), 0.3, (1.14, 1.0, 0.9)))
+# Head: wide at the cheeks with scruffy tufts (after the ink drawing). Dished
+# around the eye so the eyeball is not buried in the bridge of the nose, and
+# tessellated finely enough for the dish to read as a socket and not facets.
+# `dish` works in the mesh's own space, which is the sphere at the origin scaled
+# by (1.14, 1.0, 0.9), so the eye's world position has to come back through it.
+head = sphere("head", "fur", (0, 0, 1.3), 0.3, (1.14, 1.0, 0.9), segs=48)
+dish(head, (0.12 / 1.14, -0.244, 0.04 / 0.9), 0.16, 0.024, 2.2)
+part("head", head)
 for side, sx in (("L", 1), ("R", -1)):
     for i, (dz, length) in enumerate(((0.02, 0.14), (-0.06, 0.12), (-0.13, 0.09))):  # cheek tufts
         tip = (0.43 * sx, -0.08 - i * 0.02, 1.2 + dz - length * 0.4)
@@ -277,50 +323,57 @@ for side, sx in (("L", 1), ("R", -1)):
         part("head", w)
 
 # Eye (his left, +X): big yellow-green iris (radial shader on the site), slit
-# pupil, two catchlights, and a fur lid with an ink lash line that flicks out at
-# the corner. Lid geometry is analytic so the lash can follow its edge exactly.
+# pupil, two catchlights, and lids. Lid geometry is analytic so the lash can
+# follow the upper edge exactly.
 #
-# Everything here is placed by how far it stands PROUD of the skull, not by eye.
-# The skull surface at the eye's centre (x=0.12, z=1.34) is y = -0.2774, and the
-# old build stacked sclera -> iris -> pupil -> catchlight each further FORWARD
-# than the last, 0.030 / 0.046 / 0.057 / 0.059 proud of it, with the lid dome at
-# 0.057 -- a stepped lens sitting on the face. That is the whole "bug eye" read.
-# So the eyeball now sits back, its forward bulge is flattened, and each inner
-# part is nested just barely proud of the one in front of it:
+# Everything is placed by how far it stands PROUD of the skull, not by eye. The
+# skull surface at the eye's centre (x=0.12, z=1.34) is y = -0.2774, and the old
+# build stacked sclera -> iris -> pupil -> catchlight each further FORWARD than
+# the last, 0.030 / 0.046 / 0.057 / 0.059 proud of it, with the lid dome at 0.057
+# -- a stepped lens sitting on the face. That is the whole "bug eye" read. The
+# eyeball now sits back, its forward bulge is flattened, and each inner part is
+# nested just barely proud of the one in front of it:
 #
 #   sclera 0.0043   iris 0.0058   pupil 0.0068   catchlight 0.0056   lid 0.0053
 #
 # The flatter bulges matter as much as the depth. A deep small sphere on a
-# shallow big one is exactly the stepped-lens shape this is trying to avoid, and
-# a flatter iris keeps its rim from floating off the sclera's curve.
+# shallow big one is exactly the stepped-lens shape this avoids, and a flatter
+# iris keeps its rim from floating off the sclera's curve.
+#
+# The aperture is a lens, not a circle, because two lid caps overlap the eyeball
+# and their cut lines converge. Both are rolled by ROLL in opposite senses, which
+# narrows the gap toward +X so the eye comes to a point at the outer corner and
+# stays round at the inner one -- the cat's shape, and the reason a real eye is
+# never round. An upper lid alone, which is all this had, cannot make a corner.
 #
 # eye.L and lid.L are left where they were. No clip animates them -- the site
 # drives them live through ronin.aim() for saccades and blinks -- so the pivot
-# geometry, and with it the "the eye slides rather than spins" read, is unchanged.
+# geometry, and the "the eye slides rather than spins" read, is unchanged.
 EYE = Vector((0.12, -0.244, 1.34))
+LID_R = 0.092
+LID_TILT = math.radians(10)  # tipped forward over the eye
+ROLL = math.radians(10)      # upper and lower lids roll opposite ways: an almond
+LID_SCALE = Vector((1.05, 0.43, 1.10))
+LID_CUT = 0.0364             # the upper cut, in the cap's unscaled local z
 part("head", sphere("eye_white", "eye_white", tuple(EYE), 0.082, (1.0, 0.46, 1.08)))
-part("eye.L", sphere("iris", "iris", (0.12, -0.2734, 1.34), 0.061, (1.0, 0.16, 1.0)))
-part("eye.L", sphere("pupil", "ink", (0.12, -0.2794, 1.34), 0.034, (0.28, 0.14, 1.3)))
+part("eye.L", sphere("iris", "iris", (0.12, -0.2734, 1.34), 0.061, (1.0, 0.16, 0.92)))
+part("eye.L", sphere("pupil", "ink", (0.12, -0.2794, 1.34), 0.034, (0.28, 0.14, 1.05)))
 part("eye.L", sphere("catchlight", "eye_white", (0.10, -0.2782, 1.36), 0.012, (1.0, 0.4, 1.0)))
 part("eye.L", sphere("catchlight_small", "eye_white", (0.14, -0.2805, 1.318), 0.006, (1.0, 0.4, 1.0)))
-LID_R, LID_CUT, LID_TILT, LID_SCALE = 0.09, 0.055, math.radians(10), Vector((1.05, 0.43, 1.1))
-bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16, radius=LID_R, location=tuple(EYE))
-lid = bpy.context.object
-bm = bmesh.new()
-bm.from_mesh(lid.data)
-bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.co.z < LID_CUT], context="VERTS")  # keep the top cap
-bm.to_mesh(lid.data)
-bm.free()
-lid.scale = LID_SCALE
-lid.rotation_euler = (LID_TILT, 0, 0)  # tipped forward over the top of the eye
-part("lid.L", finish(lid, "eyelid", "fur"))
+upper = cap("eyelid", "fur", LID_R, tuple(EYE), LID_CUT, LID_SCALE, (LID_TILT, ROLL, 0))
+part("lid.L", finish(upper, "eyelid", "fur"))
+# The lower lid is static: a blink is the upper lid coming down, and a lower lid
+# that rose with it would close the eye from both sides at once.
+part("head", finish(cap("lower_lid", "fur", LID_R, (0.12, EYE.y - 0.004, 1.332),
+                        -0.0187, Vector((1.05, 0.42, 1.02)), (LID_TILT, -ROLL, 0)),
+                    "lower_lid", "fur"))
 
 
 def lid_edge(theta, grow=1.03):
     rho = math.sqrt(LID_R**2 - LID_CUT**2)
     local = Vector((rho * math.cos(theta), rho * math.sin(theta), LID_CUT))
     local = Vector((local.x * LID_SCALE.x, local.y * LID_SCALE.y, local.z * LID_SCALE.z)) * grow
-    return EYE + Euler((LID_TILT, 0, 0)).to_matrix() @ local
+    return EYE + Euler((LID_TILT, ROLL, 0)).to_matrix() @ local
 
 
 lash = [lid_edge(math.radians(a)) for a in (196, 222, 250, 278, 306, 334)]
