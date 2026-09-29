@@ -182,7 +182,7 @@ function App() {
               <span className="hero-word inline-block">Ronin<span className="baseline-probe" /></span>
             </h1>
             <p className="mt-8 max-w-[38ch] text-xl leading-snug">
-              Under-employed Killswitch guy. KO'd by Perma PTO.
+              Killswitch guy. KO'd by Perma PTO.
             </p>
           </div>
           <figure ref={art} className="hero-art m-0 lg:col-span-7">
