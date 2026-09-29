@@ -290,6 +290,7 @@ export async function mount(el, onFirstFrame) {
     brain.render(t, group.rotation.y, shown.pointer[1] * 0.4)
     map.needsUpdate = true
 
+    if (ronin) ronin.ink(camera, handle.renderer.domElement.height)
     handle.renderer.render(scene, camera)
     try {
       sky?.draw({ progress: p, center, pointer: shown.pointer })

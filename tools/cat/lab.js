@@ -100,6 +100,7 @@ renderer.setAnimationLoop(() => {
   ronin.update(dt * Number(speed.value))
   if (spin.checked) ronin.object.rotation.y += dt * 0.6
   controls.update()
+  ronin.ink(camera, renderer.domElement.height)
   renderer.render(scene, camera)
 })
 

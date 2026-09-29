@@ -22,22 +22,29 @@ scene.render.fps = 24
 
 # ── Materials: plain base colours. The site swaps them for toon materials by
 #    name, so names are the contract (see src/home/ronin.js).
+#    Values are linear. The cat is a warm oatmeal against a near-black night, and
+#    a neutral grey here reads cold and dies into the background; the hakama is
+#    pushed darker and bluer so the legs sit a clear step below the fur instead
+#    of merging with it.
 PALETTE = {
-    "fur": (0.44, 0.44, 0.45),
-    "fur_light": (0.86, 0.84, 0.80),
-    "pink": (0.93, 0.55, 0.58),
-    "mouth": (0.45, 0.10, 0.12),
-    "scar": (0.85, 0.45, 0.48),
-    "leather": (0.055, 0.045, 0.045),
-    "eye_white": (0.97, 0.96, 0.90),
+    "fur": (0.575, 0.525, 0.465),
+    "fur_light": (0.90, 0.87, 0.80),
+    "pink": (0.95, 0.56, 0.58),
+    "mouth": (0.42, 0.09, 0.11),
+    "scar": (0.86, 0.44, 0.46),
+    "leather": (0.055, 0.042, 0.042),
+    "eye_white": (0.98, 0.96, 0.90),
     "iris": (0.80, 0.82, 0.35),
     "ink": (0.05, 0.05, 0.06),
-    "beanie": (0.85, 0.62, 0.18),
-    "flannel": (0.66, 0.12, 0.13),
-    "hakama": (0.16, 0.20, 0.33),
-    "sash": (0.10, 0.12, 0.20),
-    "wood": (0.42, 0.26, 0.14),
-    "gold": (0.78, 0.60, 0.25),
+    "beanie": (0.82, 0.55, 0.13),
+    "flannel": (0.62, 0.10, 0.10),
+    "hakama": (0.145, 0.180, 0.300),
+    "sash": (0.10, 0.115, 0.205),
+    "wood": (0.40, 0.24, 0.12),
+    "gold": (0.80, 0.60, 0.24),
+    # Muted, so the hat stops being the loudest thing on him. At full marigold
+    # it was the first thing the eye landed on at hero size, ahead of the face.
+    "beanie": (0.68, 0.475, 0.175),
 }
 MATS = {}
 for name, rgb in PALETTE.items():
@@ -135,6 +142,63 @@ def stroke(name, mat, objs, xz, radius, taper=None, lift=0.003):
     return tube(name, mat, [on_surface(objs, x, z, lift) for x, z in xz], radius, taper)
 
 
+def sweep(name, mat, path, radii, verts=56, pleats=0, amp=0.0, phase=0.0,
+          hem_drop=0.0, cap_start=True, cap_end=True, smooth=True):
+    """Ring-swept tube along `path` with a real radius curve, optional radial
+    pleats and an optional scalloped hem.
+
+    limb()/cone() can only ever give a straight cone between two points with
+    r1 -> r2, which is why the hakama shows facets, the tail shows a seam and the
+    cheek tufts read as paper triangles. Everything below is one of these."""
+    n = len(path)
+    vs, fs = [], []
+    for i, (c, r) in enumerate(zip(path, radii)):
+        if i == 0:
+            d = path[1] - path[0]
+        elif i == n - 1:
+            d = path[-1] - path[-2]
+        else:
+            d = path[i + 1] - path[i - 1]
+        d = d.normalized()
+        up = Vector((0, 0, 1)) if abs(d.z) < 0.9 else Vector((1, 0, 0))
+        u = d.cross(up).normalized()
+        v = u.cross(d).normalized()
+        for j in range(verts):
+            th = 2 * math.pi * j / verts
+            lobe = math.cos(pleats * th + phase) if pleats else 0.0
+            rr = r * (1.0 + amp * lobe)
+            p = c + u * (rr * math.cos(th)) + v * (rr * math.sin(th))
+            if hem_drop and i == n - 1 and pleats:  # pleat ridges hang lower
+                p = p + d * (hem_drop * (0.5 + 0.5 * lobe))
+            vs.append(tuple(p))
+    for i in range(n - 1):
+        for j in range(verts):
+            a, b = i * verts + j, i * verts + (j + 1) % verts
+            fs.append((a, b, b + verts, a + verts))
+    if cap_start:
+        vs.append(tuple(path[0]))
+        c0 = len(vs) - 1
+        for j in range(verts):
+            fs.append((c0, (j + 1) % verts, j))
+    if cap_end:
+        vs.append(tuple(path[-1]))
+        c1 = len(vs) - 1
+        base = (n - 1) * verts
+        for j in range(verts):
+            fs.append((c1, base + j, base + (j + 1) % verts))
+    me = bpy.data.meshes.new(name)
+    me.from_pydata(vs, [], fs)
+    me.update()
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)  # ring sweep winding is not worth hand-deriving
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new(name, me)
+    scene.collection.objects.link(ob)
+    return finish(ob, name, mat, smooth=smooth)
+
+
 # ── Skeleton. Blender is Z-up; he faces -Y, so his left is +X.
 BONES = {
     # name: (head, tail, parent)
@@ -215,13 +279,31 @@ for side, sx in (("L", 1), ("R", -1)):
 # Eye (his left, +X): big yellow-green iris (radial shader on the site), slit
 # pupil, two catchlights, and a fur lid with an ink lash line that flicks out at
 # the corner. Lid geometry is analytic so the lash can follow its edge exactly.
-EYE = Vector((0.12, -0.262, 1.34))
-part("head", sphere("eye_white", "eye_white", tuple(EYE), 0.082, (1.0, 0.55, 1.08)))
-part("eye.L", sphere("iris", "iris", (0.12, -0.298, 1.34), 0.061, (1.0, 0.42, 1.0)))
-part("eye.L", sphere("pupil", "ink", (0.12, -0.324, 1.34), 0.034, (0.28, 0.3, 1.3)))
-part("eye.L", sphere("catchlight", "eye_white", (0.1, -0.332, 1.36), 0.012, (1.0, 0.4, 1.0)))
-part("eye.L", sphere("catchlight_small", "eye_white", (0.14, -0.331, 1.318), 0.006, (1.0, 0.4, 1.0)))
-LID_R, LID_CUT, LID_TILT, LID_SCALE = 0.09, 0.055, math.radians(10), Vector((1.05, 0.8, 1.1))
+#
+# Everything here is placed by how far it stands PROUD of the skull, not by eye.
+# The skull surface at the eye's centre (x=0.12, z=1.34) is y = -0.2774, and the
+# old build stacked sclera -> iris -> pupil -> catchlight each further FORWARD
+# than the last, 0.030 / 0.046 / 0.057 / 0.059 proud of it, with the lid dome at
+# 0.057 -- a stepped lens sitting on the face. That is the whole "bug eye" read.
+# So the eyeball now sits back, its forward bulge is flattened, and each inner
+# part is nested just barely proud of the one in front of it:
+#
+#   sclera 0.0043   iris 0.0058   pupil 0.0068   catchlight 0.0056   lid 0.0053
+#
+# The flatter bulges matter as much as the depth. A deep small sphere on a
+# shallow big one is exactly the stepped-lens shape this is trying to avoid, and
+# a flatter iris keeps its rim from floating off the sclera's curve.
+#
+# eye.L and lid.L are left where they were. No clip animates them -- the site
+# drives them live through ronin.aim() for saccades and blinks -- so the pivot
+# geometry, and with it the "the eye slides rather than spins" read, is unchanged.
+EYE = Vector((0.12, -0.244, 1.34))
+part("head", sphere("eye_white", "eye_white", tuple(EYE), 0.082, (1.0, 0.46, 1.08)))
+part("eye.L", sphere("iris", "iris", (0.12, -0.2734, 1.34), 0.061, (1.0, 0.16, 1.0)))
+part("eye.L", sphere("pupil", "ink", (0.12, -0.2794, 1.34), 0.034, (0.28, 0.14, 1.3)))
+part("eye.L", sphere("catchlight", "eye_white", (0.10, -0.2782, 1.36), 0.012, (1.0, 0.4, 1.0)))
+part("eye.L", sphere("catchlight_small", "eye_white", (0.14, -0.2805, 1.318), 0.006, (1.0, 0.4, 1.0)))
+LID_R, LID_CUT, LID_TILT, LID_SCALE = 0.09, 0.055, math.radians(10), Vector((1.05, 0.43, 1.1))
 bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16, radius=LID_R, location=tuple(EYE))
 lid = bpy.context.object
 bm = bmesh.new()
@@ -277,17 +359,43 @@ part("spine", cone("chest", "fur_light", (0, -0.155, 0.99), 0.1, 0.0, 0.2, rot=(
 for sx in (1, -1):  # collar points
     part("spine", cone(f"collar{sx}", "flannel", (0.07 * sx, -0.15, 1.06), 0.05, 0.0, 0.1, rot=(math.radians(200), math.radians(-35 * sx), 0), verts=3))
 
-# Hakama: waist, sash, and one wide trouser leg per leg bone
-part("hips", cone("hakama_waist", "hakama", (0, 0, 0.6), 0.23, 0.2, 0.18))
+# Hakama: waist, sash, and one wide fluted trouser leg per leg bone. The knee
+# stays on the shin bone so it travels with the shin and covers the joint as it
+# bends; the thigh's and shin's pleat phases are offset so they never line up
+# into one crease.
+part("hips", cone("hakama_waist", "hakama", (0, 0, 0.6), 0.23, 0.2, 0.18, verts=48))
 part("hips", torus("sash", "sash", (0, 0, 0.68), 0.21, 0.035))
 for side, sx in (("L", 1), ("R", -1)):
-    # Hakama in two pieces with a rounded knee, so the leg can bend over a ledge.
-    part(f"thigh.{side}", limb(f"hakama_thigh.{side}", "hakama", (0.11 * sx, 0, 0.6), (0.135 * sx, 0, 0.34), 0.11, 0.14))
-    part(f"shin.{side}", sphere(f"hakama_knee.{side}", "hakama", (0.135 * sx, 0, 0.36), 0.14))
-    part(f"shin.{side}", limb(f"hakama_shin.{side}", "hakama", (0.135 * sx, 0, 0.38), (0.16 * sx, 0, 0.14), 0.14, 0.17))
-    part(f"shin.{side}", sphere(f"foot.{side}", "fur", (0.15 * sx, -0.07, 0.06), 0.08, (1.0, 1.35, 0.6)))
-    for i, dx in enumerate((-0.04, 0.0, 0.04)):  # toes
-        part(f"shin.{side}", sphere(f"toe.{side}{i}", "fur", (0.15 * sx + dx, -0.17, 0.05), 0.028))
+    part(f"thigh.{side}", sweep(
+        f"hakama_thigh.{side}", "hakama",
+        [Vector((0.128 * sx, 0, 0.600)), Vector((0.132 * sx, 0, 0.540)),
+         Vector((0.137 * sx, 0, 0.470)), Vector((0.140 * sx, 0, 0.402))],
+        # The top ring is nearly the waist's own radius: a narrow one left the
+        # hakama reading as a flat plate with two tubes hung off it.
+        [0.150, 0.140, 0.136, 0.142],
+        verts=56, pleats=6, amp=0.10, phase=0.25 * math.pi))
+    # The last three rings are the rolled hem: full, then in, then in again, so
+    # the bottom edge is a rounded roll rather than a disc.
+    part(f"shin.{side}", sweep(
+        f"hakama_shin.{side}", "hakama",
+        [Vector((0.141 * sx, 0, 0.400)), Vector((0.144 * sx, 0, 0.330)),
+         Vector((0.146 * sx, 0, 0.262)), Vector((0.146 * sx, 0, 0.200)),
+         Vector((0.146 * sx, 0, 0.174)), Vector((0.146 * sx, 0, 0.163)),
+         Vector((0.146 * sx, 0, 0.157))],
+        [0.142, 0.152, 0.161, 0.169, 0.172, 0.167, 0.150],
+        verts=56, pleats=6, amp=0.12, phase=0.0, hem_drop=0.010))
+    part(f"shin.{side}", sphere(f"hakama_knee.{side}", "hakama", (0.140 * sx, 0, 0.368), 0.145))
+    # Paw sunk up inside the hem, with two claw lines drawn onto its surface.
+    # Named toe.* so the site's NO_OUTLINE (ronin.js) suppresses the inverted
+    # hull that would swallow a 0.0075-radius line whole.
+    paw = sphere(f"foot.{side}", "fur", (0.152 * sx, -0.045, 0.112), 0.086, (1.05, 1.45, 0.66))
+    part(f"shin.{side}", paw)
+    for i, dx in enumerate((-0.032, 0.032)):
+        part(f"shin.{side}", stroke(
+            f"toe.{side}{i}", "ink", [paw],
+            [(0.152 * sx + dx, 0.140), (0.152 * sx + dx * 1.15, 0.108),
+             (0.152 * sx + dx * 1.30, 0.082)],
+            0.0075, [0.35, 1.0, 0.2]))
 
 # Arms: rolled, frayed flannel sleeves; grey fur forearms and paws
 for side, sx in (("L", 1), ("R", -1)):
@@ -299,16 +407,60 @@ for side, sx in (("L", 1), ("R", -1)):
     part(f"forearm.{side}", limb(f"forearm_fur.{side}", "fur", mid, fa[1], 0.055, 0.06))
     part(f"forearm.{side}", sphere(f"paw.{side}", "fur", tuple(Vector(fa[1]) + Vector((0, 0, -0.035))), 0.07))
 
-# Tail: bushy, cream tip
-for i in (1, 2, 3):
-    h, t, _ = BONES[f"tail.{i}"]
-    part(f"tail.{i}", limb(f"tail.{i}", "fur", h, t, 0.07 - i * 0.006, 0.065 - i * 0.006))
-part("tail.3", sphere("tail_tip", "fur_light", BONES["tail.3"][1], 0.06))
+# Tail: one real fur taper -- thin at the root, fullest at 70% of the arc,
+# rolled off to a hooked cream tip -- instead of three constant-diameter cones
+# with blunt caps. Each spine still runs bone head -> bone tail, so the clips
+# drive it unchanged; the joint blobs live on the incoming bone so a bend cannot
+# pull the joint open.
+TAIL_PEAK = 0.064
+TAIL_CURVE = [(0.00, 0.60), (0.18, 0.82), (0.36, 0.96), (0.55, 1.00),
+              (0.70, 0.96), (0.82, 0.74), (0.92, 0.48), (1.00, 0.20)]
 
-# Katana, sheathed and tucked in the sash at his left hip
-part("hips", limb("saya", "ink", (0.2, -0.24, 0.72), (0.34, 0.5, 0.52), 0.022))
-part("hips", limb("tsuka", "wood", (0.2, -0.24, 0.72), (0.15, -0.46, 0.78), 0.024))
-part("hips", torus("tsuba", "gold", (0.2, -0.25, 0.72), 0.04, 0.012, rot=(math.radians(78), 0, math.radians(10))))
+
+def tail_radius(u):
+    """Radius as a fraction of TAIL_PEAK, at arc fraction u along the whole tail."""
+    for (u0, r0), (u1, r1) in zip(TAIL_CURVE, TAIL_CURVE[1:]):
+        if u <= u1:
+            return TAIL_PEAK * (r0 + (r1 - r0) * ((u - u0) / (u1 - u0)))
+    return TAIL_PEAK * TAIL_CURVE[-1][1]
+
+
+# Static root mass on `hips`: the animated tail.1 head is buried inside the
+# hakama waist, so without this the tail reads as growing out of the skirt side.
+part("hips", sphere("tail_root", "fur", (0, 0.170, 0.680), 0.076, (1.15, 1.0, 0.9)))
+_t_head = [Vector(BONES[f"tail.{i}"][0]) for i in (1, 2, 3)]
+_t_tail = [Vector(BONES[f"tail.{i}"][1]) for i in (1, 2, 3)]
+_t_len = [(b - a).length for a, b in zip(_t_head, _t_tail)]
+_t_total = sum(_t_len)
+_run = 0.0
+for i, (a, b, L) in enumerate(zip(_t_head, _t_tail, _t_len), start=1):
+    path, radii = [], []
+    for f in ([0.10, 0.35, 0.62, 0.88, 1.00] if i < 3 else [0.12, 0.34, 0.55, 0.74, 0.90, 1.00]):
+        p = a.lerp(b, f)
+        if i == 3 and f > 0.70:  # asymmetric tip: curl the last third toward +X
+            p = p + Vector((0.030 * (f - 0.70) / 0.30, 0, 0))
+        path.append(p)
+        radii.append(tail_radius((_run + f * L) / _t_total))
+    part(f"tail.{i}", sweep(f"tail.{i}", "fur", path, radii, verts=40))
+    _run += L
+    if i < 3:
+        part(f"tail.{i}", sphere(f"tail_joint.{i}", "fur", tuple(b), tail_radius(_run / _t_total) * 1.06, segs=16))
+part("tail.3", sphere("tail_tip", "fur_light", tuple(path[-1]), 0.018))
+
+# Katana, sheathed and tucked in the sash at his left hip: one straight diagonal
+# wholly on the +X side, so it never crosses the body centreline, tail buried in
+# the waist cone, with a tsuba that has real thickness along the blade.
+SAYA_A = Vector((0.185, 0.060, 0.600))
+SAYA_B = Vector((0.330, -0.230, 0.830))
+SAYA_AXIS = (SAYA_B - SAYA_A).normalized()
+part("hips", limb("saya", "ink", tuple(SAYA_A), tuple(SAYA_B), 0.021))
+part("hips", limb("tsuka", "wood", tuple(SAYA_B), tuple(SAYA_B + SAYA_AXIS * 0.15), 0.023))
+# tsuba: local +Z onto the blade axis, so the oval's 1.6x stretch lies across the
+# blade and the 0.9x depth is its thickness along it.
+tsuba = torus("tsuba", "gold", tuple(SAYA_B), 0.030, 0.010, scale=(1.6, 1.0, 0.9))
+tsuba.rotation_mode = "QUATERNION"
+tsuba.rotation_quaternion = SAYA_AXIS.to_track_quat("Z", "Y")
+part("hips", tsuba)
 
 # Parent every part to its bone without moving it.
 bpy.context.view_layer.update()
