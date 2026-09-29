@@ -137,26 +137,46 @@ def cap(name, mat, radius, loc, keep, scale, rot=(0, 0, 0), segs=32, ring=16):
     return o
 
 
-def dish(obj, centre, radius, depth, bias):
-    """Press a shallow socket into a part around `centre`, in the part's own mesh
-    space. `bias` deepens the dish toward -X.
+def dish(obj, eye_c, eye_s, clear=0.0015):
+    """Carve the eyeball's shadow out of a part.
 
-    A socket is not optional decoration here. The face bulges forward along the
-    centreline, so an eye set back into the skull is buried behind the bridge of
-    the nose: the head's surface is 0.051 in front of the eyeball at the eye's
-    inner rim, and occludes the inner 45% of it. No amount of pushing the eye
-    forward fixes that without re-introducing the bulge, so the face has to give.
-    The bias is what makes it an orbit rather than a crater -- shallow at the
-    eye's centre, deepest on the nasal side, which is where a real orbital rim
-    sits."""
+    Every vertex that sits in FRONT of the eyeball's surface, over the eyeball's
+    own (x, z) footprint, is pushed back behind it with `clear` to spare, and the
+    correction is blended out past the footprint so the socket has no rim.
+
+    Keep `clear` tiny. The eyeball's front pole already sits almost flush with
+    the face, so any real clearance here does not sink the eye into a socket --
+    it pushes the face back past the front of the eyeball and leaves the
+    eyeball's dome standing out of the head like a ball glued to a wall. The
+    lids are what stand proud of the face; the socket only has to get out of the
+    way.
+
+    The blend is on the footprint rather than on distance from the eye's centre,
+    and that is the whole trick. Occlusion is a question about the VIEW
+    direction: the bridge of the nose hides the iris because it is nearer to the
+    camera over the same (x, z), not because it is radially further from the
+    eye. A falloff around the eye's centre leaves the bridge untouched -- which
+    is exactly the part that has to move -- and leaves the two surfaces grazing
+    each other, so the occluded fraction sits on a knife edge and flickers with
+    tessellation. Blending the footprint puts a guaranteed margin between the
+    face and the eyeball everywhere the eye is actually seen from.
+
+    eye_c / eye_s are the eyeball's centre and semi-axes in the part's own mesh
+    space. Mesh space is the unit sphere at the origin scaled by the object's
+    transform, so a world point maps in by dividing by that scale.
+    """
+    ex, ey, ez = eye_c
+    sx, sy, sz = eye_s
     for v in obj.data.vertices:
-        dx = v.co.x - centre[0]
-        d = (v.co - Vector(centre)).length
-        if d >= radius:
+        p = v.co
+        q = ((p.x - ex) / sx) ** 2 + ((p.z - ez) / sz) ** 2
+        if q > 1.3:
             continue
-        t = 1.0 - d / radius
-        f = t * t * (3 - 2 * t)
-        v.co = v.co - v.co.normalized() * (depth * f * (1.0 + bias * max(0.0, -dx) / radius))
+        t = (q - 0.85) / 0.4
+        b = 1.0 - (t * t * (3 - 2 * t) if 0.0 < t < 1.0 else (1.0 if t >= 1.0 else 0.0))
+        front = ey - sy * math.sqrt(max(0.0, 1.0 - q))
+        if p.y < front + clear:
+            p.y += (front + clear - p.y) * b
 
 
 def on_surface(objs, x, z, lift=0.003):
@@ -287,13 +307,26 @@ def part(bone, obj):
     return obj
 
 
-# Head: wide at the cheeks with scruffy tufts (after the ink drawing). Dished
+# Where the eye sits, declared before the head because the head is carved around
+# it: the face has to be pushed back past the eyeball's own surface, so the head
+# cannot be built until the eyeball's dimensions are known. The eye's parts are
+# assembled further down, but they are sized from these.
+EYE = Vector((0.12, -0.244, 1.34))
+EYE_R = 0.060
+EYE_SCLERA = Vector((1.0, 0.52, 0.86))  # the eyeball is short: a tall sphere is a bug eye
+EYE_SEMI = Vector((EYE_R * s for s in EYE_SCLERA))
+
+# Head: wide at the cheeks with scruffy tufts (after the ink drawing). Carved
 # around the eye so the eyeball is not buried in the bridge of the nose, and
-# tessellated finely enough for the dish to read as a socket and not facets.
-# `dish` works in the mesh's own space, which is the sphere at the origin scaled
-# by (1.14, 1.0, 0.9), so the eye's world position has to come back through it.
-head = sphere("head", "fur", (0, 0, 1.3), 0.3, (1.14, 1.0, 0.9), segs=48)
-dish(head, (0.12 / 1.14, -0.244, 0.04 / 0.9), 0.16, 0.024, 2.2)
+# tessellated finely enough for the carve to read as a socket and not facets.
+# The eyeball is given in the head's own mesh space, which is the sphere at the
+# origin scaled by (1.14, 1.0, 0.9).
+head = sphere("head", "fur", (0, 0, 1.3), 0.3, (1.14, 1.0, 0.9), segs=96)
+dish(
+    head,
+    (EYE.x / 1.14, EYE.y, (EYE.z - 1.3) / 0.9),
+    (EYE_SEMI.x / 1.14, EYE_SEMI.y, EYE_SEMI.z / 0.9),
+)
 part("head", head)
 for side, sx in (("L", 1), ("R", -1)):
     for i, (dz, length) in enumerate(((0.02, 0.14), (-0.06, 0.12), (-0.13, 0.09))):  # cheek tufts
@@ -349,23 +382,62 @@ for side, sx in (("L", 1), ("R", -1)):
 # eye.L and lid.L are left where they were. No clip animates them -- the site
 # drives them live through ronin.aim() for saccades and blinks -- so the pivot
 # geometry, and the "the eye slides rather than spins" read, is unchanged.
-EYE = Vector((0.12, -0.244, 1.34))
-LID_R = 0.092
+
 LID_TILT = math.radians(10)  # tipped forward over the eye
 ROLL = math.radians(10)      # upper and lower lids roll opposite ways: an almond
-LID_SCALE = Vector((1.05, 0.43, 1.10))
-LID_CUT = 0.0364             # the upper cut, in the cap's unscaled local z
-part("head", sphere("eye_white", "eye_white", tuple(EYE), 0.082, (1.0, 0.46, 1.08)))
-part("eye.L", sphere("iris", "iris", (0.12, -0.2734, 1.34), 0.061, (1.0, 0.16, 0.92)))
-part("eye.L", sphere("pupil", "ink", (0.12, -0.2794, 1.34), 0.034, (0.28, 0.14, 1.05)))
-part("eye.L", sphere("catchlight", "eye_white", (0.10, -0.2782, 1.36), 0.012, (1.0, 0.4, 1.0)))
-part("eye.L", sphere("catchlight_small", "eye_white", (0.14, -0.2805, 1.318), 0.006, (1.0, 0.4, 1.0)))
+
+# The eye is a stack of surfaces that only reads as an eye if it is stacked in
+# the right order, front to back: catchlight, pupil, iris, eyeball, lid. Get the
+# order wrong and you do not get a subtle flaw, you get a green dome bursting out
+# of the face with a thin dark line above it -- a lid parked behind the iris.
+# So every forward depth below is written as an offset from the surface in front
+# of it, and each lid is sized from the eyeball it has to enclose. The ordering
+# is then a property of the arithmetic instead of something to eyeball and hope
+# for.
+# The iris nearly fills the eyeball's width: a wide ring of white around it is
+# what makes an eye read as startled rather than as a cat's.
+IRIS_R = 0.052
+IRIS_SHAPE = Vector((1.0, 0.16, 0.88))
+IRIS_SEMI = Vector((IRIS_R * s for s in IRIS_SHAPE))
+IRIS_PROUD = 0.0035                 # how far the iris stands off the eyeball
+IRIS_Y = EYE.y - EYE_SEMI.y - IRIS_PROUD + IRIS_SEMI.y
+
+PUPIL_R = 0.030
+PUPIL_SHAPE = Vector((0.30, 0.16, 1.0))  # a vertical slot, the width of a cat's pupil
+PUPIL_SEMI = Vector((PUPIL_R * s for s in PUPIL_SHAPE))
+PUPIL_PROUD = 0.0015
+PUPIL_Y = IRIS_Y - IRIS_SEMI.y - PUPIL_PROUD + PUPIL_SEMI.y
+
+# The lid is a cap that must both enclose the eyeball and stay in front of the
+# pupil, so its radius comes off the eyeball and its depth off the whole stack.
+# Too small a radius and the cap cannot wrap in front at all, which is what
+# leaves the eyeball bulging through as a bare dome.
+LID_R = EYE_R * 1.16
+LID_CLEAR = 0.004
+LID_DEPTH = EYE_SEMI.y + IRIS_PROUD + PUPIL_PROUD + LID_CLEAR
+LID_SCALE = Vector((1.06, LID_DEPTH / LID_R, 1.10))
+# The aperture is set where it crosses the iris, not relative to the eyeball: the
+# upper lid has to come down over the top of the iris for the almond, and a cut
+# placed against the eyeball leaves the iris a free-standing circle.
+APERTURE_TOP = 0.024                # the iris is 2*IRIS_SEMI.z = 0.092 tall, so this
+LID_CUT = APERTURE_TOP / LID_SCALE.z   # takes its top quarter behind the lid
+
+part("head", sphere("eye_white", "eye_white", tuple(EYE), EYE_R, tuple(EYE_SCLERA)))
+part("eye.L", sphere("iris", "iris", (EYE.x, IRIS_Y, EYE.z), IRIS_R, tuple(IRIS_SHAPE)))
+part("eye.L", sphere("pupil", "ink", (EYE.x, PUPIL_Y, EYE.z), PUPIL_R, tuple(PUPIL_SHAPE)))
+part("eye.L", sphere("catchlight", "eye_white", (EYE.x - 0.016, PUPIL_Y - PUPIL_SEMI.y - 0.0034, EYE.z + 0.018), 0.009, (1.0, 0.4, 1.0)))
+part("eye.L", sphere("catchlight_small", "eye_white", (EYE.x + 0.016, PUPIL_Y - PUPIL_SEMI.y - 0.003, EYE.z - 0.020), 0.005, (1.0, 0.4, 1.0)))
 upper = cap("eyelid", "fur", LID_R, tuple(EYE), LID_CUT, LID_SCALE, (LID_TILT, ROLL, 0))
 part("lid.L", finish(upper, "eyelid", "fur"))
 # The lower lid is static: a blink is the upper lid coming down, and a lower lid
-# that rose with it would close the eye from both sides at once.
-part("head", finish(cap("lower_lid", "fur", LID_R, (0.12, EYE.y - 0.004, 1.332),
-                        -0.0187, Vector((1.05, 0.42, 1.02)), (LID_TILT, -ROLL, 0)),
+# that rose with it would close the eye from both sides at once. Its cut is a
+# touch higher than the upper's, which is what tilts the aperture into a cat's
+# eye rather than a symmetric lens.
+LOWER_CUT = -0.022 / 1.02
+LOWER_LOC = Vector((EYE.x, EYE.y - 0.003, EYE.z - 0.006))
+LOWER_SCALE = Vector((1.06, LID_DEPTH / LID_R * 0.98, 1.02))
+part("head", finish(cap("lower_lid", "fur", LID_R, tuple(LOWER_LOC),
+                        LOWER_CUT, LOWER_SCALE, (LID_TILT, -ROLL, 0)),
                     "lower_lid", "fur"))
 
 
@@ -376,9 +448,26 @@ def lid_edge(theta, grow=1.03):
     return EYE + Euler((LID_TILT, ROLL, 0)).to_matrix() @ local
 
 
+def lower_edge(theta):
+    """The same cut edge for the lower lid. Without a stroke here the eye has a
+    lid above and a bare arc below, and the eyeball's own silhouette reads
+    through as a ball: the almond needs both edges drawn, not just the one that
+    blinks."""
+    rho = math.sqrt(LID_R**2 - LOWER_CUT**2)
+    local = Vector((rho * math.cos(theta), rho * math.sin(theta), LOWER_CUT))
+    local = Vector((local.x * LOWER_SCALE.x, local.y * LOWER_SCALE.y, local.z * LOWER_SCALE.z))
+    return LOWER_LOC + Euler((LID_TILT, -ROLL, 0)).to_matrix() @ local
+
+
 lash = [lid_edge(math.radians(a)) for a in (196, 222, 250, 278, 306, 334)]
 lash.append(lash[-1] + Vector((0.03, 0.004, 0.016)))  # the flick at the outer corner
 part("lid.L", tube("lash", "ink", lash, 0.0075, [0.4, 0.9, 1, 1, 1, 0.9, 0.25]))
+# The lower edge, thinner and tapering at both ends, and with no flick: the
+# flick is the upper lid's signature and copying it below reads as a second
+# eyeliner rather than an eye.
+part("head", tube("lower_lid_edge", "ink",
+                  [lower_edge(math.radians(a)) for a in (206, 240, 274, 308, 340, 364)],
+                  0.0042, [0.25, 0.7, 1, 1, 0.8, 0.35]))
 bpy.ops.mesh.primitive_cylinder_add(vertices=32, radius=0.092, depth=0.03, location=(-0.115, -0.3, 1.34), rotation=(math.radians(90), 0, math.radians(-12)))
 part("head", finish(bpy.context.object, "eyepatch", "leather"))
 # Strap: two strokes on the head's surface, traced by angle around the head
