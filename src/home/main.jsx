@@ -246,7 +246,7 @@ function App() {
               <a href="https://syzygy.catronin.com/" className="block max-w-3xl no-underline">
                 <span className="font-display text-[clamp(3rem,8vw,6.5rem)] font-bold uppercase leading-none underline decoration-accent decoration-4 underline-offset-8">Syzygy</span>
                 <span className="mt-4 block text-lg text-muted">
-                  A dreamscape city to fly through: a solarpunk metropolis that streams forever, with its own weather. WebGPU only.
+                  WebGPU - An off-reality city in active development and experimentation.
                 </span>
               </a>
             )}
