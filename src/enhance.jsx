@@ -9,8 +9,25 @@ export function canEnhance() {
   if (!mq('(min-width: 768px) and (pointer: fine)')) return false
   if (navigator.connection?.saveData) return false
   if ('gpu' in navigator) return true
+  return hasWebGL2()
+}
+
+// The labs' own boot checks: Orbius needs a WebGL 2 context, Syzygy a WebGPU adapter.
+export function hasWebGL2() {
   try {
-    return !!document.createElement('canvas').getContext('webgl2')
+    const gl = document.createElement('canvas').getContext('webgl2')
+    gl?.getExtension('WEBGL_lose_context')?.loseContext() // a probe, not a context to keep
+    return !!gl
+  } catch {
+    return false
+  }
+}
+
+// `navigator.gpu` alone is not enough: blocklisted drivers and disabled hardware
+// acceleration still expose it, and then no adapter comes back.
+export async function hasWebGPU() {
+  try {
+    return !!(await navigator.gpu?.requestAdapter())
   } catch {
     return false
   }

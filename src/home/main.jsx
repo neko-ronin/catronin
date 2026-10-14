@@ -1,7 +1,7 @@
 import { StrictMode, useCallback, useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
-import { canEnhance, whenIdle } from '../enhance.jsx'
+import { canEnhance, hasWebGL2, hasWebGPU, whenIdle } from '../enhance.jsx'
 import './home.css'
 
 // Observational captions only — rename or rewrite these in your own words.
@@ -149,6 +149,12 @@ function App() {
   const art = useRef(null)
   const { stage, live, world, go } = useNight(art)
   const [capable] = useState(canEnhance)
+  // A lab that cannot run here is not linked. Syzygy is null while its adapter is asked for.
+  const [orbius] = useState(hasWebGL2)
+  const [syzygy, setSyzygy] = useState(() => ('gpu' in navigator ? null : false))
+  useEffect(() => {
+    hasWebGPU().then(setSyzygy)
+  }, [])
 
   return (
     <>
@@ -159,7 +165,11 @@ function App() {
         <a href="/" className="font-display text-xl font-bold uppercase tracking-wide no-underline">Cat Ronin</a>
         <nav className="flex items-center gap-6">
           <a href="#specimens" className="hidden sm:inline">Specimens</a>
-          <a href="https://orbius.catronin.com/" className="hidden sm:inline">Orbius</a>
+          {orbius && <a href="https://orbius.catronin.com/" className="hidden sm:inline">Orbius</a>}
+          {/* Laid out while the adapter answers, like the toggle below. */}
+          {syzygy !== false && (
+            <a href="https://syzygy.catronin.com/" className={`hidden sm:inline ${syzygy ? '' : 'invisible'}`}>Syzygy</a>
+          )}
           <a href="#lab">Lab</a>
           {/* Laid out from the start and shown once the night is live: arriving
               later, it made the header taller and pushed the page down. */}
@@ -222,13 +232,28 @@ function App() {
 
         <section id="lab" className="wrap border-t border-rule py-28">
           <h2 className="font-display text-2xl font-semibold uppercase tracking-wide text-muted">Lab</h2>
-          <a href="https://orbius.catronin.com/" className="mt-6 block max-w-3xl no-underline">
-            <span className="font-display text-[clamp(3rem,8vw,6.5rem)] font-bold uppercase leading-none underline decoration-accent decoration-4 underline-offset-8">Orbius</span>
-            <span className="mt-4 block text-lg text-muted">
-              Web toy from the slop cannon, if you ask me. Tasteful though, as far as web toys go.
-              UX oddities and bugs aside, play with it. Press all the buttons. Save composition to browser collections or to local disk.
-            </span>
-          </a>
+          <div className="mt-6 space-y-16">
+            {orbius && (
+              <a href="https://orbius.catronin.com/" className="block max-w-3xl no-underline">
+                <span className="font-display text-[clamp(3rem,8vw,6.5rem)] font-bold uppercase leading-none underline decoration-accent decoration-4 underline-offset-8">Orbius</span>
+                <span className="mt-4 block text-lg text-muted">
+                  Web toy from the slop cannon, if you ask me. Tasteful though, as far as web toys go.
+                  UX oddities and bugs aside, play with it. Press all the buttons. Save composition to browser collections or to local disk.
+                </span>
+              </a>
+            )}
+            {syzygy && (
+              <a href="https://syzygy.catronin.com/" className="block max-w-3xl no-underline">
+                <span className="font-display text-[clamp(3rem,8vw,6.5rem)] font-bold uppercase leading-none underline decoration-accent decoration-4 underline-offset-8">Syzygy</span>
+                <span className="mt-4 block text-lg text-muted">
+                  A dreamscape city to fly through: a solarpunk metropolis that streams forever, with its own weather. WebGPU only.
+                </span>
+              </a>
+            )}
+            {!orbius && syzygy === false && (
+              <p className="text-lg text-muted">The labs need WebGL 2 or WebGPU, and this browser offers neither.</p>
+            )}
+          </div>
         </section>
       </main>
 
