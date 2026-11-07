@@ -10,6 +10,7 @@ import {
   smoothstep, uniform, vec2, vec3, vec4,
 } from 'three/tsl'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { createAimLayer } from './aim-layer.js'
 
 // ── The wash ──
@@ -201,7 +202,7 @@ const OUTLINE_PX = 5.4 // the ink line's weight, in device pixels
 // `fur` is the shell count: 0 for flat toon, ~4 for the full look.
 export async function loadRonin(url = '/cat/ronin.glb', { fur = 4, furLength = 0.026 } = {}) {
   const [gltf, manifest] = await Promise.all([
-    new GLTFLoader().loadAsync(url),
+    new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(url),
     fetch(url.replace(/\.glb$/, '.clips.json')).then((r) => r.json()),
   ])
   const loops = new Set(manifest.filter((c) => c.loop).map((c) => c.name))
