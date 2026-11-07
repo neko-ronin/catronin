@@ -8,6 +8,9 @@
 // tools/cat/build_cat.py), which keeps it reading as a cartoon eye.
 const EYE = { yaw: 7, pitch: 6 } // max degrees
 const HEAD = { yaw: 16, pitch: 9 }
+// How far each lid turns to shut, in degrees from open (LID_OPEN in Tumbler's
+// build_cat.py). The lower lid swings up as the upper comes down.
+const LID = { upper: 23, lower: -15.5 }
 // How much each clip lets the pointer steer him (the clip's own looks win).
 const ATTENTION = { sit: 1, sit_present: 0.3, sit_lookaround: 0.25, sit_doze: 0 }
 
@@ -74,9 +77,10 @@ export function createDirector(ronin) {
       // rides a little with the gaze like a real upper lid.
       const blinking = t > blinkAt && t < blinkAt + 0.13
       if (t > blinkAt + 0.13) blinkAt = t + 2.2 + Math.random() * 4.5
-      const lidTarget = dozing ? 64 : blinking ? 72 : eye.pitch * EYE.pitch * attention * 0.8
+      const lidTarget = dozing ? LID.upper * 0.92 : blinking ? LID.upper : Math.max(0, eye.pitch * EYE.pitch * attention * 0.8)
       lid = blinking ? lidTarget : approach(lid, lidTarget, dozing ? 2 : 20, dt)
       ronin.aim('lid.L', { pitch: lid })
+      ronin.aim('lid_lower.L', { pitch: (lid / LID.upper) * LID.lower })
     },
   }
 }

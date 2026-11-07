@@ -1,7 +1,7 @@
 import { StrictMode, useCallback, useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
-import { canEnhance, hasWebGL2, hasWebGPU, whenIdle } from '../enhance.jsx'
+import { canEnhance, hasWebGL2, whenIdle } from '../enhance.jsx'
 import './home.css'
 
 // Observational captions only — rename or rewrite these in your own words.
@@ -149,12 +149,8 @@ function App() {
   const art = useRef(null)
   const { stage, live, world, go } = useNight(art)
   const [capable] = useState(canEnhance)
-  // A lab that cannot run here is not linked. Syzygy is null while its adapter is asked for.
-  const [orbius] = useState(hasWebGL2)
-  const [syzygy, setSyzygy] = useState(() => ('gpu' in navigator ? null : false))
-  useEffect(() => {
-    hasWebGPU().then(setSyzygy)
-  }, [])
+  // A lab that cannot run here is not linked.
+  const [webgl2] = useState(hasWebGL2)
 
   return (
     <>
@@ -165,11 +161,8 @@ function App() {
         <a href="/" className="font-display text-xl font-bold uppercase tracking-wide no-underline">Cat Ronin</a>
         <nav className="flex items-center gap-6">
           <a href="#specimens" className="hidden sm:inline">Specimens</a>
-          {orbius && <a href="https://orbius.catronin.com/" className="hidden sm:inline">Orbius</a>}
-          {/* Laid out while the adapter answers, like the toggle below. */}
-          {syzygy !== false && (
-            <a href="https://syzygy.catronin.com/" className={`hidden sm:inline ${syzygy ? '' : 'invisible'}`}>Syzygy</a>
-          )}
+          {webgl2 && <a href="https://orbius.catronin.com/" className="hidden sm:inline">Orbius</a>}
+          {webgl2 && <a href="https://tumbler.catronin.com/" className="hidden sm:inline">Tumbler</a>}
           <a href="#lab">Lab</a>
           {/* Laid out from the start and shown once the night is live: arriving
               later, it made the header taller and pushed the page down. */}
@@ -233,7 +226,7 @@ function App() {
         <section id="lab" className="wrap border-t border-rule py-28">
           <h2 className="font-display text-2xl font-semibold uppercase tracking-wide text-muted">Lab</h2>
           <div className="mt-6 space-y-16">
-            {orbius && (
+            {webgl2 && (
               <a href="https://orbius.catronin.com/" className="block max-w-3xl no-underline">
                 <span className="font-display text-[clamp(3rem,8vw,6.5rem)] font-bold uppercase leading-none underline decoration-accent decoration-4 underline-offset-8">Orbius</span>
                 <span className="mt-4 block text-lg text-muted">
@@ -242,16 +235,16 @@ function App() {
                 </span>
               </a>
             )}
-            {syzygy && (
-              <a href="https://syzygy.catronin.com/" className="block max-w-3xl no-underline">
-                <span className="font-display text-[clamp(3rem,8vw,6.5rem)] font-bold uppercase leading-none underline decoration-accent decoration-4 underline-offset-8">Syzygy</span>
+            {webgl2 && (
+              <a href="https://tumbler.catronin.com/" className="block max-w-3xl no-underline">
+                <span className="font-display text-[clamp(3rem,8vw,6.5rem)] font-bold uppercase leading-none underline decoration-accent decoration-4 underline-offset-8">Tumbler</span>
                 <span className="mt-4 block text-lg text-muted">
-                  WebGPU - An off-reality city in active development and experimentation.
+                  Interactive 3D experience serving as practice for agentic software development workflows.
                 </span>
               </a>
             )}
-            {!orbius && syzygy === false && (
-              <p className="text-lg text-muted">The labs need WebGL 2 or WebGPU, and this browser offers neither.</p>
+            {!webgl2 && (
+              <p className="text-lg text-muted">The labs need WebGL 2, and this browser does not offer it.</p>
             )}
           </div>
         </section>

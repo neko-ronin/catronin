@@ -19,10 +19,11 @@ mats = {m["name"] for m in gltf.get("materials", [])}
 
 missing = {
     "clips": want_clips - have_clips,
-    "bones": {"root", "head", "eye.L", "lid.L", "upper_arm.L", "tail.3"} - nodes,
-    "face": {"eyelid", "lash", "mouth.L", "mouth.R", "iris", "pupil", "catchlight"} - nodes,
-    "materials": {"fur", "flannel", "beanie", "iris", "ink", "hakama"} - mats,
+    "bones": {"root", "head", "eye.L", "lid.L", "lid_lower.L", "upper_arm.L", "tail.7"} - nodes,
+    "face": {"head.mesh", "eyelid.L", "lower_lid.L", "eyepatch.hex", "mouth.L", "mouth.R", "iris", "pupil", "catchlight"} - nodes,
+    "materials": {"fur", "fur_coat", "fur_tail", "flannel", "beanie", "iris", "ink", "hakama"} - mats,
 }
+missing["unworn parts"] = {n for n in nodes if n.startswith(("eyepatch.round", "eyepatch.almond", "eyepatch.shield", "blade_edge", "katana_grip"))}
 problems = {k: sorted(v) for k, v in missing.items() if v}
 assert not problems, f"GLB incomplete: {problems}"
 print(f"ok: {len(data) // 1024} KB, {len(have_clips)} clips {sorted(have_clips)}, {len(gltf['meshes'])} meshes, {len(mats)} materials")

@@ -1,12 +1,13 @@
-// Cat Ronin in three.js: loads the GLB built by tools/cat/build.sh, swaps its
-// plain materials for cel shading with ink outlines, and plays its clips.
+// Cat Ronin in three.js: loads the GLB built by tools/cat/build.sh (Tumbler's
+// model, the site's clips), keeps its colours under this page's cel shading and
+// ink outlines, and plays its clips.
 // Used by the site's night scene and by the dev-only lab (tools/cat/lab.html).
 import * as THREE from 'three/webgpu'
 import { LightingModel } from 'three/webgpu'
 import {
-  atan, color, diffuseColor, float, floor, fract, hash, length, max, mix, mx_noise_float, normalLocal,
+  atan, color, diffuseColor, float, floor, fract, hash, length, materialColor, max, mix, mx_noise_float, normalLocal,
   normalView, positionLocal, positionView, positionViewDirection, positionWorld, pow, saturate, sin,
-  smoothstep, uniform, vec2,
+  smoothstep, uniform, vec2, vec3, vec4,
 } from 'three/tsl'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { createAimLayer } from './aim-layer.js'
@@ -78,43 +79,12 @@ function inkMaterial(name) {
   return m
 }
 
-// Buffalo check for the flannel: red and black, with the darker crossings.
-function plaid() {
-  const c = document.createElement('canvas')
-  c.width = c.height = 64
-  const g = c.getContext('2d')
-  g.fillStyle = '#9c2b28'
-  g.fillRect(0, 0, 64, 64)
-  g.fillStyle = 'rgba(30,14,17,0.46)'
-  g.fillRect(0, 0, 32, 64)
-  g.fillRect(0, 0, 64, 32)
-  const t = new THREE.CanvasTexture(c)
-  t.wrapS = t.wrapT = THREE.RepeatWrapping
-  // Fine enough to survive the site's minification as a texture. Coarser than
-  // this and each check is several pixels on a 130px-tall character, where the
-  // whole shirt collapses into an undifferentiated red mottle.
-  t.repeat.set(7, 5)
-  t.magFilter = THREE.NearestFilter
-  t.minFilter = THREE.NearestMipmapLinearFilter
-  t.colorSpace = THREE.SRGBColorSpace
-  return t
-}
-
 // ── Surface shaders (TSL: WGSL on WebGPU, GLSL on WebGL 2) ──
 // Where the beanie brim sits, and how deep the shadow it drops on the skull.
 // The brim is the brightest thing on him, so without a shadow under it the top
 // of the head is as light as the hat and the face never comes forward.
 const BROW = [1.30, 1.44, 0.5]
 
-// Tabby: bands along each part's long axis. On limbs and the tail that gives
-// rings; on the head, stripes. Kept shallow and only lightly warped -- warp it
-// hard and the bands smear into grey blotches instead of reading as markings.
-function tabby(base, depth = 0.24) {
-  const p = positionLocal
-  const warp = mx_noise_float(p.mul(6.5)).mul(1.1)
-  const band = smoothstep(0.1, 0.55, sin(p.y.mul(30).add(warp)))
-  return color(base).mul(float(1).sub(band.mul(depth)))
-}
 // The brim's shadow, keyed to world height so it lands on the skull and the ear
 // roots and nowhere else.
 function underBrim(c) {
@@ -124,32 +94,23 @@ function underBrim(c) {
 // so the leg has a base, plus a soft occlusion where the pleats meet the waist.
 // Without it the hakama is the largest mass on him and holds one value from top
 // to bottom, which reads as a hole rather than a garment.
-function drape(base) {
+function drape() {
   const y = positionWorld.y
   const fall = smoothstep(float(0.62), float(0.14), y) // 0 at the waist, 1 at the hem
   const lift = float(0.3).mul(fall)
   const waist = smoothstep(float(0.74), float(0.6), y).mul(0.18) // the pleats darken at the top
-  return color(base).mul(float(1).add(lift).sub(waist))
+  return materialColor.mul(float(1).add(lift).sub(waist))
 }
 // Knit ribs running around the beanie, broken up by a slow noise so they read
 // as wool rather than as corduroy: a perfectly even rib was the loudest thing
 // on the hat.
-function knit(base) {
+function knit() {
   const p = positionLocal
   const wobble = mx_noise_float(p.mul(11)).mul(1.6)
   const rib = smoothstep(-0.5, 0.5, sin(atan(p.z, p.x).mul(52).add(wobble)))
   const band = sin(atan(p.z, p.x).mul(13)).mul(0.5).add(0.5)
-  return color(base).mul(rib.mul(0.1).add(0.9)).mul(band.mul(0.06).add(0.97))
+  return materialColor.mul(rib.mul(0.1).add(0.9)).mul(band.mul(0.06).add(0.97))
 }
-// Iris: dark olive rim to a bright yellow-green centre, with fine radial
-// striations. glTF puts the iris's face in its local XY plane.
-function iris() {
-  const p = positionLocal
-  const r = length(p.xy).div(0.061) // iris radius in tools/cat/build_cat.py
-  const fibres = sin(atan(p.y, p.x).mul(34)).mul(0.06).add(0.97)
-  return mix(color('#4d5a16'), color('#e8e76a'), smoothstep(0.98, 0.35, r)).mul(fibres)
-}
-
 // ── Shell fur ──
 // Layer h of n is the part's surface pushed out along its normals and cut into
 // strands. Three things decide whether this reads as fur or as dirt:
@@ -165,16 +126,16 @@ function iris() {
 //   * Colour. Fur catches light on the tips and is dark at the root, so a
 //     strand is a little warmer and lighter than the skin under it and the skin
 //     is darkened where the fur roots. A strand darker than its base is a speck
-//     of dirt, which is what the first version looked like.
+//     of dirt, which is what the first version looked like. Strands take the
+//     coat's own colour at their root, so the markings run through the fur.
 const FUR_CELLS = 120 // strand cells per world unit
 const FUR_LIFT = 0.022 // how much light a strand tip catches over its base
-// `socket` opens a fur-free patch around a point in this part's own local space.
-// Shell fur is lifted FUR_LENGTH along the normals, which is deeper than the
-// eyeball now sits, so the head's strands spear straight through the eye. There
-// is no depth trick for that: the strands are genuinely in front of the eyeball
-// everywhere near it, so the fur simply has to stop there.
-function shellMaterial(part, base, h, len, stripes, radius, socket, cache) {
-  const key = `${part}|${base}|${h.toFixed(3)}|${stripes ? 1 : 0}`
+// `bare` lists fur-free ellipsoids on the part, as { at, radii } in the model's
+// rest space, and `toRest` takes this part's local space there. Shell fur is
+// lifted well clear of the surface, so it would spear through the eye and bury
+// the nose and mouth: there is no depth trick for that, the fur has to stop.
+function shellMaterial(part, source, h, len, radius, bare, toRest, cache) {
+  const key = `${part}|${h.toFixed(3)}`
   const shared = cache.get(key)
   if (shared) {
     // Per part, not per material: the arc scale is a uniform, so sharing one
@@ -184,6 +145,9 @@ function shellMaterial(part, base, h, len, stripes, radius, socket, cache) {
     return shared.material
   }
   const m = inkMaterial('shell')
+  m.map = source.map
+  m.vertexColors = source.vertexColors
+  m.color.copy(source.color)
   const radiusU = uniform(radius)
   const lift = float(h) // h is a plain number, so it has to enter the graph as a node
   const p = positionLocal
@@ -202,24 +166,36 @@ function shellMaterial(part, base, h, len, stripes, radius, socket, cache) {
   const cov = saturate(r.sub(d).div(0.16))
   const keep = smoothstep(lift.mul(0.7), lift.mul(0.7).add(0.3), hash(id.add(vec2(3.3, lift.mul(31.7)))))
   let op = cov.mul(keep)
-  if (socket) {
-    const centre = vec3(socket.at[0], socket.at[1], socket.at[2])
-    op = op.mul(smoothstep(float(socket.r0), float(socket.r1), length(p.sub(centre))))
+  if (bare) {
+    const rest = uniform(toRest).mul(vec4(p, 1)).xyz
+    for (const { at, radii } of bare) {
+      op = op.mul(smoothstep(float(1), float(1.25), length(rest.sub(vec3(...at)).div(vec3(...radii)))))
+    }
   }
   m.positionNode = p.add(normalLocal.mul(lift.mul(len)))
   m.opacityNode = op
   m.alphaTest = 0.4
-  m.colorNode = (stripes ? tabby(base, 0.08) : color(base)).mul(0.9).add(float(FUR_LIFT).mul(lift))
+  m.colorNode = materialColor.mul(0.9).add(float(FUR_LIFT).mul(lift))
   cache.set(key, { material: m, radius: radiusU })
   return m
 }
 
-export const BONES = ['root', 'hips', 'spine', 'head', 'ear.L', 'ear.R', 'eye.L', 'lid.L', 'upper_arm.L', 'forearm.L', 'upper_arm.R', 'forearm.R', 'thigh.L', 'shin.L', 'thigh.R', 'shin.R', 'tail.1', 'tail.2', 'tail.3']
+export const BONES = ['root', 'hips', 'spine', 'head', 'ear.L', 'ear.R', 'eye.L', 'lid.L', 'lid_lower.L', 'upper_arm.L', 'forearm.L', 'upper_arm.R', 'forearm.R', 'thigh.L', 'shin.L', 'thigh.R', 'shin.R', 'tail.1', 'tail.2', 'tail.3', 'tail.4', 'tail.5', 'tail.6', 'tail.7']
+
+// Where the head's fur stops, in rest coordinates: mouth, nose, under the eyepatch,
+// and the open eye. Tumbler's measurements for this model (FACES.ronin in its
+// character-surface.js).
+const BARE_FACE = [
+  { at: [0, 1.19, 0.27], radii: [0.085, 0.045, 0.07] },
+  { at: [0, 1.241, 0.285], radii: [0.05, 0.03, 0.05] },
+  { at: [-0.128, 1.345, 0.22], radii: [0.135, 0.106, 0.1] },
+  { at: [0.128, 1.335, 0.222], radii: [0.1, 0.09, 0.085] },
+]
 
 // Parts that get no ink contour. The exclusions are thin membranes and painted
 // marks: an inverted hull on a whisker is a dark line lying across itself, and
 // it would swallow a 0.0075-radius claw line whole.
-const NO_OUTLINE = /whisker|iris|pupil|catchlight|mouth|philtrum|lash|nose|strap|scar|toe/
+const NO_OUTLINE = /whisker|iris|pupil|catchlight|eyeball|mouth|philtrum|nose|strap|scar|toe|finger|welt|rivet|button|placket|ear_hair|ring|pip|glow|obi_tie|ankle|forearm_fur/
 const OUTLINE_PX = 5.4 // the ink line's weight, in device pixels
 
 // `fur` is the shell count: 0 for flat toon, ~4 for the full look.
@@ -229,7 +205,6 @@ export async function loadRonin(url = '/cat/ronin.glb', { fur = 4, furLength = 0
     fetch(url.replace(/\.glb$/, '.clips.json')).then((r) => r.json()),
   ])
   const loops = new Set(manifest.filter((c) => c.loop).map((c) => c.name))
-  const flannel = plaid()
   // The ink line is a fixed weight on screen, so widen the hull by the view
   // depth instead of a constant world offset -- otherwise the line fattens as
   // he comes forward and thins as the camera pulls back. `inkScale` is
@@ -253,45 +228,42 @@ export async function loadRonin(url = '/cat/ronin.glb', { fur = 4, furLength = 0
   const ink = inkHull(0)
   const inkFur = inkHull(furLength * 1.15)
 
+  // A copy of a part in another material, riding on it. A skinned part's copy has
+  // to bend with the same skeleton, or the fur and ink stay behind in the bind pose.
+  function layerOf(o, material, name) {
+    const layer = o.isSkinnedMesh ? new THREE.SkinnedMesh(o.geometry, material) : new THREE.Mesh(o.geometry, material)
+    if (o.isSkinnedMesh) layer.bind(o.skeleton, o.bindMatrix)
+    layer.name = name
+    o.add(layer)
+  }
+
   const toon = new Map()
   const outlined = []
   const furred = []
-  const bases = new Map() // material name -> Blender base colour
-  const meshes = new Map() // name -> mesh, to find the eye socket relative to the head
   gltf.scene.traverse((o) => {
     if (!o.isMesh) return
     const src = o.material
     if (!toon.has(src.name)) {
       const m = inkMaterial(src.name)
-      const base = `#${src.color.getHexString()}`
-      bases.set(src.name, base)
-      if (src.name === 'flannel') m.map = flannel
-      else if (src.name === 'fur') m.colorNode = underBrim(tabby(base).mul(0.86))
-      else if (src.name === 'beanie') m.colorNode = knit(base)
-      else if (src.name === 'iris') m.colorNode = iris()
-      else if (src.name === 'hakama') m.colorNode = drape(base)
-      else m.color = src.color
+      m.color.copy(src.color)
+      m.map = src.map
+      m.vertexColors = src.vertexColors
+      m.side = src.side
+      m.transparent = src.transparent
+      m.depthWrite = src.depthWrite
+      if (src.name === 'fur_coat') m.colorNode = underBrim(materialColor.mul(0.86))
+      else if (src.name === 'beanie') m.colorNode = knit()
+      else if (src.name === 'hakama') m.colorNode = drape()
       toon.set(src.name, m)
     }
     o.material = toon.get(src.name)
-    if (!meshes.has(o.name)) meshes.set(o.name, o)
     if (!NO_OUTLINE.test(o.name)) outlined.push(o)
     // Both lids are membranes one strand-length from the eyeball; fur on them
     // just spears the iris, and they read as smooth hoods either way.
     if (fur && /^fur/.test(src.name) && !/^eyelid|^lower_lid/.test(o.name)) furred.push(o)
   })
-  // Where the head's fur has to stop: centred on the eyeball, in the head mesh's
-  // own local space. The two share a bone, so this offset is fixed for the
-  // pose and the mask stays put through saccades, blinks and head turns.
   gltf.scene.updateMatrixWorld(true)
-  const headMesh = meshes.get('head')
-  const socket = headMesh && meshes.has('eye_white') && (() => {
-    const at = meshes.get('eye_white').getWorldPosition(new THREE.Vector3())
-    headMesh.worldToLocal(at)
-    // Wide enough to stay off the whole pressed socket, not just the eyeball.
-    return { at: at.toArray(), r0: 0.14, r1: 0.19 }
-  })()
-
+  const toModel = gltf.scene.matrixWorld.clone().invert()
   const shells = new Map()
   const furredSet = new Set()
   for (const o of furred) {
@@ -299,19 +271,16 @@ export async function loadRonin(url = '/cat/ronin.glb', { fur = 4, furLength = 0
     const span = o.geometry.boundingBox.getSize(new THREE.Vector3())
     const radius = Math.max(span.x, span.y) * 0.25 || 0.08
     furredSet.add(o)
+    const isHead = o.name === 'headmesh'
+    const toRest = isHead ? new THREE.Matrix4().multiplyMatrices(toModel, o.matrixWorld) : null
     for (let i = 1; i <= fur; i++) {
-      const h = i / fur
-      const m = shellMaterial(o.name, bases.get(o.material.name), h, furLength, o.material.name === 'fur', radius, o === headMesh ? socket : null, shells)
-      const layer = new THREE.Mesh(o.geometry, m)
-      layer.name = `${o.name}.fur${i}`
-      o.add(layer)
+      const m = shellMaterial(o.name, o.material, i / fur, furLength, radius, isHead ? BARE_FACE : null, toRest, shells)
+      layerOf(o, m, `${o.name}.fur${i}`)
     }
   }
   // Inverted hull: a back-face copy pushed out along normals reads as an ink line.
   for (const o of outlined) {
-    const hull = new THREE.Mesh(o.geometry, furredSet.has(o) ? inkFur : ink)
-    hull.name = `${o.name}.outline`
-    o.add(hull)
+    layerOf(o, furredSet.has(o) ? inkFur : ink, `${o.name}.outline`)
   }
 
   // Rest orientation of every bone, relative to the model: the frame that
@@ -392,10 +361,12 @@ export async function loadRonin(url = '/cat/ronin.glb', { fur = 4, furLength = 0
     },
     dispose() {
       mixer.stopAllAction()
-      flannel.dispose()
       ink.dispose()
       inkFur.dispose()
-      toon.forEach((m) => m.dispose())
+      toon.forEach((m) => {
+        m.map?.dispose()
+        m.dispose()
+      })
       shells.forEach(({ material }) => material.dispose())
     },
   }
