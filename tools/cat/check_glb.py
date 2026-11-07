@@ -12,7 +12,7 @@ chunk_len, chunk_type = struct.unpack_from("<II", data, 12)
 assert chunk_type == 0x4E4F534A, "first chunk is not JSON"
 gltf = json.loads(data[20 : 20 + chunk_len])
 
-want_clips = {c["name"] for c in json.load(open(clips_path))}
+want_clips = {c["name"] for c in json.load(open(clips_path))} | {"sit_draw"}
 have_clips = {a["name"] for a in gltf.get("animations", [])}
 nodes = {n.get("name") for n in gltf["nodes"]}
 mats = {m["name"] for m in gltf.get("materials", [])}
@@ -20,10 +20,11 @@ mats = {m["name"] for m in gltf.get("materials", [])}
 missing = {
     "clips": want_clips - have_clips,
     "bones": {"root", "head", "eye.L", "lid.L", "lid_lower.L", "upper_arm.L", "tail.7"} - nodes,
+    "sword": {"saya", "sword.sheathed", "sword.drawn", "sword_blade", "sword_hilt", "sword_hilt_drawn"} - nodes,
     "face": {"head.mesh", "eyelid.L", "lower_lid.L", "eyepatch.hex", "mouth.L", "mouth.R", "iris", "pupil", "catchlight"} - nodes,
-    "materials": {"fur", "fur_coat", "fur_tail", "flannel", "beanie", "iris", "ink", "hakama"} - mats,
+    "materials": {"fur", "fur_coat", "fur_tail", "flannel", "beanie", "iris", "ink", "hakama", "sword"} - mats,
 }
-missing["unworn parts"] = {n for n in nodes if n.startswith(("eyepatch.round", "eyepatch.almond", "eyepatch.shield", "blade_edge", "katana_grip"))}
+missing["unworn parts"] = {n for n in nodes if n.startswith(("eyepatch.round", "eyepatch.almond", "eyepatch.shield", "blade_edge", "katana_", "harness_", "holster"))}
 problems = {k: sorted(v) for k, v in missing.items() if v}
 assert not problems, f"GLB incomplete: {problems}"
 print(f"ok: {len(data) // 1024} KB, {len(have_clips)} clips {sorted(have_clips)}, {len(gltf['meshes'])} meshes, {len(mats)} materials")

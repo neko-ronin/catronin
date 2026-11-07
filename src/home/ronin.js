@@ -195,7 +195,7 @@ const BARE_FACE = [
 // Parts that get no ink contour. The exclusions are thin membranes and painted
 // marks: an inverted hull on a whisker is a dark line lying across itself, and
 // it would swallow a 0.0075-radius claw line whole.
-const NO_OUTLINE = /whisker|iris|pupil|catchlight|eyeball|mouth|philtrum|nose|strap|scar|toe|finger|welt|rivet|button|placket|ear_hair|ring|pip|glow|obi_tie|ankle|forearm_fur/
+const NO_OUTLINE = /whisker|iris|pupil|catchlight|eyeball|mouth|philtrum|nose|strap|scar|toe|finger|welt|rivet|button|placket|ear_hair|obi_tie|blade|ankle|forearm_fur/
 const OUTLINE_PX = 5.4 // the ink line's weight, in device pixels
 
 // `fur` is the shell count: 0 for flat toon, ~4 for the full look.

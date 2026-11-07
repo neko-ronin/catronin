@@ -2,7 +2,8 @@
   python3 tools/cat/import_tumbler.py <tumbler ronin.glb> <clips.glb> <out.glb>
 
 clips.glb is what build_cat.py exports from clips.json. Only its animations are
-used. Stdlib only, on purpose: the GLB is plain JSON plus a binary chunk.
+used. His sword and the clip that draws it are in sword.py. Stdlib only, on
+purpose: the GLB is plain JSON plus a binary chunk.
 
 A clip stores each bone's rotation relative to its parent, and Tumbler's bones
 rest differently (arms, ears, tail), so copying keys would bend him wrongly.
@@ -18,8 +19,9 @@ import re
 import struct
 import sys
 
-# Tumbler's game swaps these at runtime; the site only ever shows the worn set.
-UNWORN = re.compile(r"^eyepatch\.(round|almond|shield)|^blade(_edge)?\.|^katana_(collar|emitter|glow|grip|guard|pip|pommel)$")
+# Tumbler's game swaps the eyepatches at runtime and straps its katana to a chest
+# harness. The site shows one eyepatch and wears sword.py's katana at the waist.
+UNWORN = re.compile(r"^eyepatch\.(round|almond|shield)|^blade(_edge)?\.|^katana_|^harness_|^holster")
 # Three tail bones become seven: each share turns its bones equally, so the
 # whole tail still curls by the same total.
 TAIL = {"tail.1": ["tail.1", "tail.2"], "tail.2": ["tail.3", "tail.4"], "tail.3": ["tail.5", "tail.6", "tail.7"]}
@@ -197,6 +199,7 @@ def main(tumbler_path, clips_path, out_path):
         scene["nodes"] = [node_map[i] for i in scene["nodes"]]
 
     used_meshes = sorted({n["mesh"] for n in nodes if "mesh" in n})
+    bone_at = {nodes[i]["name"]: i for i in range(len(nodes))}
     mesh_map = {old: new for new, old in enumerate(used_meshes)}
     meshes = [gltf["meshes"][i] for i in used_meshes]
     for n in nodes:
@@ -256,12 +259,47 @@ def main(tumbler_path, clips_path, out_path):
     for image in gltf.get("images", []):
         image["bufferView"] = copy_view(image["bufferView"])
 
+    # The katana: one material, its colours on the vertices, three meshes.
+    def add_sword_mesh(name, mesh):
+        ints = len(out) + (-len(out) % 4)
+        out.extend(b"\0" * (ints - len(out)))
+        out.extend(struct.pack(f"<{len(mesh.indices)}I", *mesh.indices))
+        views.append({"buffer": 0, "byteOffset": ints, "byteLength": len(out) - ints})
+        accessors.append({"bufferView": len(views) - 1, "componentType": 5125, "count": len(mesh.indices), "type": "SCALAR"})
+        indices = len(accessors) - 1
+        attributes = {
+            "POSITION": add_floats(mesh.positions, "VEC3", True),
+            "NORMAL": add_floats(mesh.normals, "VEC3"),
+            "COLOR_0": add_floats(mesh.colours, "VEC3"),
+        }
+        meshes.append({"name": name, "primitives": [{"attributes": attributes, "indices": indices, "material": len(materials)}]})
+        return len(meshes) - 1
+
+    blade, hilt, scabbard = add_sword_mesh("sword_blade", sword.blade_mesh()), add_sword_mesh("sword_hilt", sword.hilt_mesh()), add_sword_mesh("saya", sword.scabbard_mesh())
+    materials.append({"name": "sword", "pbrMetallicRoughness": {"metallicFactor": 0, "roughnessFactor": 0.5}})
+
+    def add_node(parent, **node):
+        nodes.append(node)
+        nodes[bone_at[parent]].setdefault("children", []).append(len(nodes) - 1)
+        bone_at[node["name"]] = len(nodes) - 1
+        return len(nodes) - 1
+
+    at, turn = sword.worn()
+    add_node("hips", name="saya", mesh=scabbard, translation=list(at), rotation=list(turn))
+    add_node("hips", name="sword.sheathed", translation=list(at), rotation=list(turn))
+    add_node("sword.sheathed", name="sword_hilt", mesh=hilt)
+    add_node("forearm.L", name="sword.drawn", translation=[0, 0.2, 0], scale=[0.001] * 3)
+    add_node("sword.drawn", name="sword_blade", mesh=blade)
+    add_node("sword.drawn", name="sword_hilt_drawn", mesh=hilt)
+
+    clips["sit_draw"], reach_error = sword.author_draw(target_rig, clips["sit"])
+
     animations = []
     for name, tracks in clips.items():
         anim = {"name": name, "channels": [], "samplers": []}
         for (bone, path), (times, values) in tracks.items():
-            kind = {"rotation": "VEC4", "translation": "VEC3"}[path]
-            anim["channels"].append({"sampler": len(anim["samplers"]), "target": {"node": node_map[target_rig.index[bone]], "path": path}})
+            kind = {"rotation": "VEC4", "translation": "VEC3", "scale": "VEC3"}[path]
+            anim["channels"].append({"sampler": len(anim["samplers"]), "target": {"node": bone_at[bone], "path": path}})
             anim["samplers"].append({"input": add_floats(times, "SCALAR", True), "output": add_floats(values, kind), "interpolation": "LINEAR"})
         animations.append(anim)
 
@@ -273,8 +311,12 @@ def main(tumbler_path, clips_path, out_path):
         f.write(struct.pack("<III", 0x46546C67, 2, 12 + 8 + len(text) + 8 + len(out)))
         f.write(struct.pack("<II", len(text), 0x4E4F534A) + text)
         f.write(struct.pack("<II", len(out), 0x004E4942) + out)
-    print(f"imported: {len(out) // 1024} KB binary, {len(meshes)} meshes, {len(clips)} clips, worst pose error {worst:.4f} deg")
+    print(f"imported: {len(out) // 1024} KB binary, {len(meshes)} meshes, {len(clips)} clips, worst pose error {worst:.4f} deg, paw {reach_error * 1000:.1f} mm off the hilt")
 
 
 if __name__ == "__main__":
+    # sword.py imports this file's helpers, which must be this module, not a second copy.
+    sys.modules["import_tumbler"] = sys.modules["__main__"]
+    import sword
+
     main(*sys.argv[1:])

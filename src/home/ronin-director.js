@@ -12,13 +12,15 @@ const HEAD = { yaw: 16, pitch: 9 }
 // build_cat.py). The lower lid swings up as the upper comes down.
 const LID = { upper: 23, lower: -15.5 }
 // How much each clip lets the pointer steer him (the clip's own looks win).
-const ATTENTION = { sit: 1, sit_present: 0.3, sit_lookaround: 0.25, sit_doze: 0 }
+const ATTENTION = { sit: 1, sit_present: 0.3, sit_lookaround: 0.25, sit_doze: 0, sit_draw: 0.05 }
 
 const clamp = (v) => Math.max(-1, Math.min(1, v))
 const approach = (from, to, rate, dt) => from + (to - from) * (1 - Math.exp(-rate * dt))
 
 export function createDirector(ronin) {
-  let nextGlance = 8
+  let started = false // the scene ticks before he appears, however long loading takes
+  let nextGlance = 0
+  let nextDraw = 0 // the first idle beat shows the sword off; after that it is a treat
   let lastMove = 0
   let dozing = false
   const want = { yaw: 0, pitch: 0 } // where the pointer is, normalised -1..1
@@ -32,7 +34,10 @@ export function createDirector(ronin) {
 
   return {
     start() {
-      lastMove = performance.now() / 1000
+      const now = performance.now() / 1000
+      started = true
+      lastMove = now
+      nextGlance = nextDraw = now + 6
       ronin.play('sit_present', { fade: 0.3, then: 'sit' })
     },
     reset() {
@@ -41,6 +46,7 @@ export function createDirector(ronin) {
     },
     // pointer and headScreen in normalised device coordinates (-1..1, y up).
     tick(t, dt, pointer, headScreen, moved) {
+      if (!started) return
       if (moved) {
         lastMove = t
         if (dozing) {
@@ -53,8 +59,10 @@ export function createDirector(ronin) {
         dozing = true
         ronin.play('sit_doze', { fade: 1.2 })
       } else if (!dozing && t > nextGlance && ronin.clip === 'sit') {
-        ronin.play('sit_lookaround', { then: 'sit' })
-        nextGlance = t + 12 + Math.random() * 8
+        const draw = t >= nextDraw
+        ronin.play(draw ? 'sit_draw' : 'sit_lookaround', { then: 'sit' })
+        if (draw) nextDraw = t + 45 + Math.random() * 30
+        nextGlance = t + (draw ? 6 : 0) + 12 + Math.random() * 8
       }
 
       want.yaw = clamp((pointer.x - headScreen.x) / 0.9)
