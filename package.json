@@ -22,6 +22,6 @@
     "deploy": "vite build && wrangler deploy",
     "login": "wrangler login",
     "cat": "tools/cat/build.sh",
-    "test": "node tools/cat/check_aims.mjs && node tools/cat/check_director.mjs"
+    "test": "node tools/cat/check_aims.mjs && node tools/cat/check_director.mjs && python3 tools/cat/slim.py"
   }
 }

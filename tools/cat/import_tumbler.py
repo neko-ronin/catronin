@@ -22,6 +22,36 @@ import sys
 # Tumbler's game swaps the eyepatches at runtime and straps its katana to a chest
 # harness. The site shows one eyepatch and wears sword.py's katana at the waist.
 UNWORN = re.compile(r"^eyepatch\.(round|almond|shield)|^blade(_edge)?\.|^katana_|^harness_|^holster")
+# Share of its triangles each part keeps. He is small on the page and the fur and ink
+# redraw every part up to six times, so this is where the weight goes. Everything not
+# listed is untouched: eyeball, iris, pupil, lids, nose, mouth, whiskers, eyepatch.
+SLIM = {
+    "head.mesh": 0.5, "ear.L.mesh": 0.3, "ear.R.mesh": 0.3,
+    "beanie": 0.4, "beanie_cuff": 0.4, "beanie_ear_hole.L": 0.5, "beanie_ear_hole.R": 0.5,
+    "torso": 0.45, "sleeve.L": 0.5, "sleeve.R": 0.5,
+    "hakama.L": 0.4, "hakama.R": 0.4, "cat_tail": 0.45,
+    "foot.L": 0.45, "foot.R": 0.45, "paw.L": 0.5, "paw.R": 0.5,
+    "chest_ruff.0": 0.55, "chest_ruff.1": 0.55,
+}
+# How far a part may drift from its original surface, in metres. This is what decides
+# in the end: SLIM only caps how much a part may lose, and a part whose target would
+# need more than this stops short. Raise it for a smaller file and a coarser cat.
+SLIM_TOLERANCE = 0.0015
+# The same for painted detail: tail rings, hakama folds, knit ribs. Linear colour, 0..1.
+SLIM_COLOUR_TOLERANCE = 0.06
+# Except where ronin.js paints over it: knit() draws the beanie's ribs itself, and these
+# parts' every vertex sits on a rib, so holding the colours would keep them all.
+SLIM_REPAINTED = {"beanie", "beanie_cuff"}
+# The face, in rest coordinates (metres, z forward), as (centre, radii, importance).
+# These are Tumbler's measurements (FACES.ronin), a little enlarged. Inside the first
+# four nothing is removed; the last covers the rest of the face at a steep price.
+FACE = [
+    ((0.128, 1.335, 0.222), (0.14, 0.13, 0.12), math.inf),  # the open eye
+    ((-0.128, 1.345, 0.22), (0.17, 0.14, 0.13), math.inf),  # under the patch's edge
+    ((0, 1.241, 0.285), (0.08, 0.06, 0.08), math.inf),  # nose
+    ((0, 1.19, 0.27), (0.12, 0.07, 0.1), math.inf),  # mouth
+    ((0, 1.27, 0.2), (0.3, 0.24, 0.2), 40.0),  # brow, cheeks and muzzle
+]
 # Three tail bones become seven: each share turns its bones equally, so the
 # whole tail still curls by the same total.
 TAIL = {"tail.1": ["tail.1", "tail.2"], "tail.2": ["tail.3", "tail.4"], "tail.3": ["tail.5", "tail.6", "tail.7"]}
@@ -107,6 +137,51 @@ class Rig:
             names.append(self.nodes[i]["name"])
             i = self.parent.get(i)
         return names[::-1]
+
+
+def node_matrix(node):
+    """A glTF node's local transform: (rotation, scale, translation)."""
+    return tuple(node.get("rotation", (0, 0, 0, 1))), tuple(node.get("scale", (1, 1, 1))), tuple(node.get("translation", (0, 0, 0)))
+
+
+def rotated(q, v):
+    u, w = q[:3], q[3]
+    c = (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0])
+    d = (u[1] * c[2] - u[2] * c[1], u[2] * c[0] - u[0] * c[2], u[0] * c[1] - u[1] * c[0])
+    return tuple(v[i] + 2 * (w * c[i] + d[i]) for i in range(3))
+
+
+def to_model(nodes, parent, index, point):
+    """A point in this node's space, in the model's rest pose."""
+    while index is not None:
+        rotation, scale, translation = node_matrix(nodes[index])
+        point = rotated(rotation, tuple(p * s for p, s in zip(point, scale)))
+        point = tuple(p + t for p, t in zip(point, translation))
+        index = parent.get(index)
+    return point
+
+
+def face_importance(point):
+    weight = 1.0
+    for centre, radii, price in FACE:
+        if sum(((p - c) / r) ** 2 for p, c, r in zip(point, centre, radii)) < 1:
+            weight = max(weight, price)
+    return weight
+
+
+def rows_of(glb, index):
+    """An accessor's elements as float tuples, normalised integers scaled to 0..1."""
+    gltf, blob = glb
+    acc = gltf["accessors"][index]
+    view = gltf["bufferViews"][acc["bufferView"]]
+    assert "byteStride" not in view, "interleaved vertex data is not expected from Blender"
+    width = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}[acc["type"]]
+    code, size, top = {5126: ("f", 4, 1), 5125: ("I", 4, 1), 5123: ("H", 2, 65535), 5121: ("B", 1, 255)}[acc["componentType"]]
+    at = view.get("byteOffset", 0) + acc.get("byteOffset", 0)
+    rows = [struct.unpack_from(f"<{width}{code}", blob, at + i * width * size) for i in range(acc["count"])]
+    if acc.get("normalized"):
+        rows = [tuple(v / top for v in row) for row in rows]
+    return rows
 
 
 def retarget(source, source_rig, target_rig):
@@ -250,10 +325,57 @@ def main(tumbler_path, clips_path, out_path):
         accessors.append(accessor)
         return len(accessors) - 1
 
-    for mesh in meshes:
+    def subset_accessor(index, kept):
+        """The same accessor, holding only the kept vertices, byte for byte."""
+        accessor = dict(gltf["accessors"][index])
+        view = gltf["bufferViews"][accessor["bufferView"]]
+        size = {5126: 4, 5125: 4, 5123: 2, 5121: 1}[accessor["componentType"]] * {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}[accessor["type"]]
+        start = view.get("byteOffset", 0) + accessor.get("byteOffset", 0)
+        out.extend(b"\0" * (-len(out) % 4))
+        at = len(out)
+        for v in kept:
+            out.extend(blob[start + v * size : start + (v + 1) * size])
+        views.append({"buffer": 0, "byteOffset": at, "byteLength": len(out) - at})
+        accessor.update(bufferView=len(views) - 1, count=len(kept), byteOffset=0)
+        if "min" in accessor:
+            rows = rows_of(target, index)
+            accessor["min"] = [min(rows[v][i] for v in kept) for i in range(len(accessor["min"]))]
+            accessor["max"] = [max(rows[v][i] for v in kept) for i in range(len(accessor["max"]))]
+        accessors.append(accessor)
+        return len(accessors) - 1
+
+    # Rest pose of each mesh node, to find the face. head.mesh is the only part it touches.
+    parents = {c: i for i, n in enumerate(nodes) for c in n.get("children", [])}
+    mesh_node = {n["mesh"]: i for i, n in enumerate(nodes) if "mesh" in n}
+    before = after = 0
+    for mesh_index, mesh in enumerate(meshes):
+        share = SLIM.get(nodes[mesh_node[mesh_index]]["name"])
         for p in mesh["primitives"]:
-            p["attributes"] = {k: copy_accessor(v) for k, v in p["attributes"].items()}
-            p["indices"] = copy_accessor(p["indices"])
+            if share is None:
+                p["attributes"] = {k: copy_accessor(v) for k, v in p["attributes"].items()}
+                p["indices"] = copy_accessor(p["indices"])
+                continue
+            positions = rows_of(target, p["attributes"]["POSITION"])
+            flat = [row[0] for row in rows_of(target, p["indices"])]
+            triangles = [tuple(flat[i : i + 3]) for i in range(0, len(flat), 3)]
+            colours = rows_of(target, p["attributes"]["COLOR_0"]) if "COLOR_0" in p["attributes"] else None
+            importance = None
+            if nodes[mesh_node[mesh_index]]["name"] == "head.mesh":
+                importance = [face_importance(to_model(nodes, parents, mesh_node[mesh_index], q)) for q in positions]
+            reduced = slim.reduce(positions, triangles, int(len(triangles) * share), rows_of(target, p["attributes"]["NORMAL"]), colours, importance, SLIM_TOLERANCE, math.inf if nodes[mesh_node[mesh_index]]["name"] in SLIM_REPAINTED else SLIM_COLOUR_TOLERANCE)
+            before += len(triangles)
+            after += len(reduced)
+            kept = sorted({v for t in reduced for v in t})
+            renumber = {v: i for i, v in enumerate(kept)}
+            p["attributes"] = {k: subset_accessor(v, kept) for k, v in p["attributes"].items()}
+            ints = [renumber[v] for t in reduced for v in t]
+            assert len(kept) < 65536
+            out.extend(b"\0" * (-len(out) % 4))
+            at = len(out)
+            out.extend(struct.pack(f"<{len(ints)}H", *ints))
+            views.append({"buffer": 0, "byteOffset": at, "byteLength": len(out) - at})
+            accessors.append({"bufferView": len(views) - 1, "componentType": 5123, "count": len(ints), "type": "SCALAR"})
+            p["indices"] = len(accessors) - 1
     for skin in gltf["skins"]:
         skin["inverseBindMatrices"] = copy_accessor(skin["inverseBindMatrices"])
     for image in gltf.get("images", []):
@@ -263,9 +385,9 @@ def main(tumbler_path, clips_path, out_path):
     def add_sword_mesh(name, mesh):
         ints = len(out) + (-len(out) % 4)
         out.extend(b"\0" * (ints - len(out)))
-        out.extend(struct.pack(f"<{len(mesh.indices)}I", *mesh.indices))
+        out.extend(struct.pack(f"<{len(mesh.indices)}H", *mesh.indices))
         views.append({"buffer": 0, "byteOffset": ints, "byteLength": len(out) - ints})
-        accessors.append({"bufferView": len(views) - 1, "componentType": 5125, "count": len(mesh.indices), "type": "SCALAR"})
+        accessors.append({"bufferView": len(views) - 1, "componentType": 5123, "count": len(mesh.indices), "type": "SCALAR"})
         indices = len(accessors) - 1
         attributes = {
             "POSITION": add_floats(mesh.positions, "VEC3", True),
@@ -311,12 +433,13 @@ def main(tumbler_path, clips_path, out_path):
         f.write(struct.pack("<III", 0x46546C67, 2, 12 + 8 + len(text) + 8 + len(out)))
         f.write(struct.pack("<II", len(text), 0x4E4F534A) + text)
         f.write(struct.pack("<II", len(out), 0x004E4942) + out)
-    print(f"imported: {len(out) // 1024} KB binary, {len(meshes)} meshes, {len(clips)} clips, worst pose error {worst:.4f} deg, paw {reach_error * 1000:.1f} mm off the hilt")
+    print(f"imported: {len(out) // 1024} KB binary, {len(meshes)} meshes, {len(clips)} clips, worst pose error {worst:.4f} deg, paw {reach_error * 1000:.1f} mm off the hilt, slimmed {before} -> {after} triangles")
 
 
 if __name__ == "__main__":
     # sword.py imports this file's helpers, which must be this module, not a second copy.
     sys.modules["import_tumbler"] = sys.modules["__main__"]
+    import slim
     import sword
 
     main(*sys.argv[1:])
