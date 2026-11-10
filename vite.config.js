@@ -14,6 +14,7 @@ export default defineConfig({
         main: page('./index.html'),
         labs: page('./labs/index.html'),
         fieldnote: page('./labs/fieldnote/index.html'),
+        clouds: page('./labs/clouds/index.html'),
       },
     },
   },

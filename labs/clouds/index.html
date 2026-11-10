@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="How Tumbler builds fly-through cumulus over its Sierra Nevada-inspired valley. A rendering field note and an engine-neutral porting guide.">
+  <meta name="theme-color" content="#0b0c12">
+  <meta property="og:title" content="Inside the clouds · Catronin Lab">
+  <meta property="og:description" content="A field note on building real-time clouds you can fly through, with a porting guide for other engines.">
+  <meta property="og:image" content="https://catronin.com/labs/clouds/flight.webp">
+  <link rel="canonical" href="https://catronin.com/labs/clouds/">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/src/clouds/clouds.css">
+  <script type="module" src="/src/clouds/clouds.js"></script>
+  <title>Inside the clouds · Catronin Lab</title>
+</head>
+<body>
+  <a class="skip" href="#content">Skip to article</a>
+  <header class="site-header wrap">
+    <a class="brand" href="/" aria-label="Catronin home">Catronin<span>.</span></a>
+    <nav aria-label="Site">
+      <a href="/labs/">Lab</a>
+      <a href="https://tumbler.catronin.com/">Play Tumbler <span aria-hidden="true">↗</span></a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <article>
+      <header class="hero wrap">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="crosshair" aria-hidden="true">✦</span> Tumbler / Rendering field note</p>
+          <h1>Inside the<br> <em>clouds</em></h1>
+          <p class="deck">How we built fly-through cumulus over Tumbler’s Sierra Nevada-inspired valley, and how to make it in your own engine.</p>
+          <div class="actions">
+            <a class="button primary" href="/labs/clouds/tumbler-clouds.md" download><span aria-hidden="true">↓</span> Download Markdown</a>
+            <button class="button secondary" type="button" data-print hidden>Print / Save PDF</button>
+          </div>
+          <noscript><p class="small">Use your browser’s Print command to save a PDF.</p></noscript>
+        </div>
+        <figure class="hero-figure">
+          <img src="/labs/clouds/flight.webp" width="1280" height="590" fetchpriority="high" alt="A paraglider approaches a cloud over a winding river and steep granite walls in Tumbler.">
+          <figcaption><span>Fig. 01 <span class="muted">/ In-game flight</span></span><span>North wall · 1,573 m</span></figcaption>
+        </figure>
+      </header>
+
+      <div class="folio wrap">
+        <nav class="contents" aria-label="On this page">
+          <a href="#field"><span>01</span> The field</a>
+          <a href="#revisions"><span>02</span> The revisions</a>
+          <a href="#port"><span>03</span> The port</a>
+        </nav>
+
+        <section class="chapter" id="field" aria-labelledby="field-title">
+          <div class="chapter-heading">
+            <p class="eyebrow">01 / The field</p>
+            <h2 id="field-title">Anatomy of a cloud</h2>
+          </div>
+          <div class="chapter-body">
+            <p class="lead">A Tumbler cloud is an authored volume with a procedural interior. The world places the cloud. The shader gives it a silhouette, depth, and light you can fly through.</p>
+            <dl class="recipe">
+              <div>
+                <dt><span>01</span> Shape the billows</dt>
+                <dd>Start with a wide, low ellipsoid and seven uneven lobes. Take the maximum of their signed profiles, rotate the arrangement with the cell seed, then soften the flat base and box boundary. Each cell has a center, three dimensions, and a seed. Tumbler places 16 of them in a common 980–1,600 m altitude band.</dd>
+              </div>
+              <div>
+                <dt><span>02</span> Erode the edges</dt>
+                <dd>Pack three octaves of smooth value noise and two scales of inverted Worley noise into a repeating 48³ RGBA8 texture. Value noise roughens the body. The coarse Worley channel cuts scallops and the fine channel erodes the edges. Wind moves the noise through the anchored shape.</dd>
+              </div>
+              <div>
+                <dt><span>03</span> March through it</dt>
+                <dd>Intersect the camera ray with the box and stop it at the opaque world’s depth. Clamp entry to zero for a camera inside the cloud. March at half width and height, offset the samples with stable per-pixel jitter, and stop early when transmission is nearly zero. Composite in linear color before tone mapping.</dd>
+              </div>
+              <div>
+                <dt><span>04</span> Give it light</dt>
+                <dd>Trace five expanding samples toward the sun through the coarser density. Cache direct and soft transmission in a padded 32³ lattice per cell, typically refreshed about twice per simulation second. Height-tinted ambient and a forward-scattering term give cool bases and bright backlit edges. The same field casts shadows into a separate 256² ground map.</dd>
+              </div>
+            </dl>
+            <figure class="formula">
+              <figcaption class="eyebrow">One sample / front to back</figcaption>
+              <pre><code>a = 1 − exp(−extinction × density × stepLength)
+cloudLight += transmission × a × sampleLight
+transmission *= 1 − a
+
+outLinear = cloudLight + transmission × sceneLinear</code></pre>
+            </figure>
+            <p class="small">Distant cloud color fades toward the same clear-air sky color as the background. The Markdown guide includes the density coefficients, cache layout, and depth-clipping pseudocode.</p>
+          </div>
+        </section>
+
+        <section class="chapter" id="revisions" aria-labelledby="revisions-title">
+          <div class="chapter-heading">
+            <p class="eyebrow">02 / The revisions</p>
+            <h2 id="revisions-title">What changed</h2>
+          </div>
+          <div class="chapter-body">
+            <ol class="history">
+              <li><h3>From painted sky to real volume</h3><p>The original sky painted broad cloud cover in 2D. The first fly-through version placed nine volumes with three smooth lobes each. Later passes widened the coverage, shaped unequal turrets and flat bases, layered the erosion, and shared the sky’s haze. The sunlight cache kept the fine detail in the view march while amortizing the coarser sun-ray work.</p></li>
+              <li><h3>Steadier edges in flight</h3><p>The view march doubled from 48 to 96 samples. This reduced visible stepping at cloud edges during flight, with a measurable GPU cost. A separate optimization skips provably empty samples above the cloud layer and preserves the positions of all occupied samples.</p></li>
+            </ol>
+            <table class="measurements">
+              <caption>Moving cloud-edge test against a 192-sample reference</caption>
+              <thead><tr><th scope="col">Cloud pass</th><th scope="col">48 samples</th><th scope="col">96 samples</th></tr></thead>
+              <tbody>
+                <tr><th scope="row">Worst opacity error <small>/ 255</small></th><td>25</td><td>5</td></tr>
+                <tr><th scope="row">Worst temporal residual <small>/ 255</small></th><td>24</td><td>4</td></tr>
+                <tr><th scope="row">Median GPU time</th><td>3.93 ms</td><td>8.91 ms</td></tr>
+              </tbody>
+            </table>
+            <p class="small">GPU timings describe the cloud pass on the test setup. Temporal residual measures the frame-to-frame difference left after accounting for motion in the reference.</p>
+            <div class="atlas-note">
+              <h3>Horizontal bands in the valley preview</h3>
+              <p>Three.js r180 applied the canvas pixel ratio to offscreen scissor coordinates that were already in atlas texels. With r187 the cloud-lighting atlas addressed its texels directly. The bands disappeared, and the atlas matched byte for byte across five render scales from 0.7 to 2. The density and all 96 view samples stayed the same. <a href="https://github.com/mrdoob/three.js/wiki/Migration-Guide#186--187">Three.js migration notes</a></p>
+            </div>
+          </div>
+          <figure class="comparison" aria-labelledby="comparison-caption">
+            <div class="comparison-images">
+              <div class="capture before">
+                <img src="/labs/clouds/before.webp" width="1280" height="680" alt="Valley baseline, with horizontal bands of brightness across the cloud.">
+                <span aria-hidden="true">Baseline · r180</span>
+              </div>
+              <div class="capture after">
+                <img src="/labs/clouds/after.webp" width="1280" height="680" alt="Valley preview at the same viewpoint, with continuous lighting across the cloud.">
+                <span aria-hidden="true">Valley preview · r187</span>
+              </div>
+            </div>
+            <div class="compare-controls" hidden>
+              <label for="split">Reveal baseline</label>
+              <input type="range" id="split" min="0" max="100" value="50" aria-describedby="comparison-caption">
+              <output for="split">50%</output>
+            </div>
+            <figcaption id="comparison-caption"><span class="eyebrow">Fig. 02 / Matched captures</span> Same cloud-level camera in the valley worktree, before and after the atlas fix.</figcaption>
+          </figure>
+        </section>
+
+        <section class="chapter" id="port" aria-labelledby="port-title">
+          <div class="chapter-heading">
+            <p class="eyebrow">03 / The port</p>
+            <h2 id="port-title">One cloud first</h2>
+          </div>
+          <div class="chapter-body">
+            <p class="lead">Build one cloud at a fixed seed, sun, and wind. Use your engine’s depth and color conventions. Start with the full density march and direct sun samples, then profile the camera path before deciding where to spend your sample budget.</p>
+            <ol class="checklist">
+              <li>Record a fixed path from below, across the edge, through the interior, and out above. Include a ridge crossing in front of the cloud and try both low and high sun.</li>
+              <li>Compare with a higher-sample render and report median and 95th-percentile GPU time. Check for stepping, seams, depth leaks, and lighting bands at different render scales.</li>
+              <li>Add the sunlight cache, more cells, and ground shadows. Verify that projected shadows accumulate in either draw order. If cloud volumes frequently intersect, integrate overlapping density in the same ray march.</li>
+            </ol>
+            <p class="small">For a coding agent, hand over the Markdown, a reference capture, the target renderer’s depth and color conventions, and one fixed camera route. Ask for that fly-through and its timings as the first deliverable.</p>
+            <p class="small">For more on production cloud authoring and fly-through rendering, see <a href="https://www.guerrilla-games.com/read/nubis-authoring-real-time-volumetric-cloudscapes-with-the-decima-engine">Guerrilla’s Nubis authoring talk</a> and <a href="https://www.guerrilla-games.com/read/nubis-cubed">Nubis³</a>.</p>
+          </div>
+        </section>
+      </div>
+    </article>
+  </main>
+
+  <footer class="site-footer wrap">
+    <div><p class="eyebrow">Catronin Lab / Tumbler</p><p>Take the field note with you.</p></div>
+    <div class="actions">
+      <a class="button primary" href="/labs/clouds/tumbler-clouds.md" download><span aria-hidden="true">↓</span> Download Markdown</a>
+      <button class="button secondary" type="button" data-print hidden>Print / Save PDF</button>
+    </div>
+  </footer>
+</body>
+</html>

@@ -244,8 +244,11 @@ function App() {
               </a>
             )}
             {!webgl2 && (
-              <p className="text-lg text-muted">The labs need WebGL 2, and this browser does not offer it.</p>
+              <p className="text-lg text-muted">The interactive labs need WebGL 2, and this browser does not offer it.</p>
             )}
+            <a href="/labs/clouds/" className="inline-block text-lg underline decoration-accent underline-offset-4">
+              Tumbler field note · Inside the clouds
+            </a>
           </div>
         </section>
       </main>
