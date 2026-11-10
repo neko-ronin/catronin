@@ -2,3 +2,6 @@ node_modules/
 dist/
 .wrangler/
 .DS_Store
+.agents/
+.hermes/
+skills-lock.json
