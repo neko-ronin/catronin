@@ -242,7 +242,7 @@ function App() {
                   0.7.0 Nov 11 2026
                 </span>
                 <span className="mt-4 block text-lg text-muted">
-                  3D demo acting as a vehicle for agentic software development workflows. It's not a game. You can climb tree, roll down hills, speedfly via parakite. Random items will coalesce into structured gameplay in time. Wokflow details will be written up later. An article on cloud development is linked below per someone's inquiry from social media.
+                  3D demo acting as a vehicle for agentic software development workflows. Save your work, it might freeze your computer. It's not a game. You can climb tree, roll down hills, speedfly via parakite. Random items will coalesce into structured gameplay in time. Wokflow details will be written up later. An article on cloud development is linked below per someone's inquiry from social media.
                 </span>
               </a>
             )}
