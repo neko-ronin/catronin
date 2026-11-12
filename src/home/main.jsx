@@ -238,8 +238,11 @@ function App() {
             {webgl2 && (
               <a href="https://tumbler.catronin.com/" className="block max-w-3xl no-underline">
                 <span className="font-display text-[clamp(3rem,8vw,6.5rem)] font-bold uppercase leading-none underline decoration-accent decoration-4 underline-offset-8">Tumbler</span>
+                <span className="mt-4 block text-lg font-bold">
+                  0.7.0 Nov 11 2026
+                </span>
                 <span className="mt-4 block text-lg text-muted">
-                  Interactive 3D experience serving as practice for agentic software development workflows.
+                  3D demo acting as a vehicle for agentic software development workflows. It's not a game. You can climb tree, roll down hills, speedfly via parakite. Random items will coalesce into structured gameplay in time. Wokflow details will be written up later. An article on cloud development is linked below per someone's inquiry from social media.
                 </span>
               </a>
             )}
