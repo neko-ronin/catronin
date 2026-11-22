@@ -228,21 +228,40 @@ function App() {
           <div className="mt-6 space-y-16">
             {webgl2 && (
               <a href="https://orbius.catronin.com/" className="block max-w-3xl no-underline">
-                <span className="font-display text-[clamp(3rem,8vw,6.5rem)] font-bold uppercase leading-none underline decoration-accent decoration-4 underline-offset-8">Orbius</span>
+                <span className="font-display block text-[clamp(3rem,8vw,6.5rem)] font-bold uppercase leading-none underline decoration-accent decoration-4 underline-offset-8">Orbius</span>
+                <div className="mt-2">
+                  <span className="text-sm font-bold">
+                    Nov 21 2026
+                  </span>
+                  <span>
+                    &nbsp;-&nbsp;
+                  </span>
+                  <span className="text-sm">
+                    Added pre-made collections and scenes
+                  </span>
+                </div>
                 <span className="mt-4 block text-lg text-muted">
-                  Web toy from the slop cannon, if you ask me. Tasteful though, as far as web toys go.
-                  UX oddities and bugs aside, play with it. Press all the buttons. Save composition to browser collections or to local disk.
+                  Astra slop test. Can't say I'm not casually delighted by the very niche 3D artifacts though.
+                  UX and composition architecture is atrocious but I hack at it everyone once and awhile, play with it. Press all the buttons. Save composition to browser collections or to local disk.
                 </span>
               </a>
             )}
             {webgl2 && (
               <a href="https://tumbler.catronin.com/" className="block max-w-3xl no-underline">
-                <span className="font-display text-[clamp(3rem,8vw,6.5rem)] font-bold uppercase leading-none underline decoration-accent decoration-4 underline-offset-8">Tumbler</span>
-                <span className="mt-4 block text-lg font-bold">
-                  0.7.0 Nov 11 2026
-                </span>
+                <span className="font-display block text-[clamp(3rem,8vw,6.5rem)] font-bold uppercase leading-none underline decoration-accent decoration-4 underline-offset-8">Tumbler</span>
+                <div className="mt-2">
+                  <span className="text-sm font-bold">
+                    0.8.6 Nov 20 2026
+                  </span>
+                  <span>
+                    &nbsp;-&nbsp;
+                  </span>
+                  <span className="mt-4 text-sm">
+                    Parakite canpoy loads carrying inertia for barrel rolls. Flight tutorial added.
+                  </span>
+                </div>
                 <span className="mt-4 block text-lg text-muted">
-                  3D demo acting as a vehicle for agentic software development workflows. Save your work, it might freeze your computer. It's not a game. You can climb tree, roll down hills, speedfly via parakite. Random items will coalesce into structured gameplay in time. Wokflow details will be written up later. An article on cloud development is linked below per someone's inquiry from social media.
+                  3D demo acting as a vehicle for agentic software development workflows. Save your work, it eats up RAM and GPU like as 3D games do. It's not a game. You can climb trees, roll down hills, speedfly via para-kite/glider. Idle freedoms will coalesce into structured gameplay in time. Workflow details will be written up later. An article on cloud development is linked below per someone's inquiry from social media.
                 </span>
               </a>
             )}
