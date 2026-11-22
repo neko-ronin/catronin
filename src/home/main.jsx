@@ -241,8 +241,8 @@ function App() {
                   </span>
                 </div>
                 <span className="mt-4 block text-lg text-muted">
-                  Astra slop test. Can't say I'm not casually delighted by the very niche 3D artifacts though.
-                  UX and composition architecture is atrocious but I hack at it everyone once and awhile, play with it. Press all the buttons. Save composition to browser collections or to local disk.
+                  Astra test. Currently slop but can't say I'm not delighted by the 3D artifacts created.
+                  UX and composition architecture is atrocious but I poke at it every once and awhile.
                 </span>
               </a>
             )}
@@ -261,7 +261,7 @@ function App() {
                   </span>
                 </div>
                 <span className="mt-4 block text-lg text-muted">
-                  3D demo acting as a vehicle for agentic software development workflows. Save your work, it eats up RAM and GPU like as 3D games do. It's not a game. You can climb trees, roll down hills, speedfly via para-kite/glider. Idle freedoms will coalesce into structured gameplay in time. Workflow details will be written up later. An article on cloud development is linked below per someone's inquiry from social media.
+                  3D demo of a glacial valley serving as a vehicle for agentic software development. Make space, it eats up RAM and GPU. It's not a game but you can climb trees, roll down hills, speedfly via para-kite/glider. Idle freedoms will coalesce into structured gameplay in time. Workflow details will be written up later. An article on cloud development is linked below per someone's inquiry from social media.
                 </span>
               </a>
             )}
@@ -277,7 +277,7 @@ function App() {
 
       <footer className="wrap relative z-10 flex flex-wrap justify-between gap-3 py-10 text-sm text-muted">
         <span>catronin.com</span>
-        <span>React, three.js and vgpu, served from Cloudflare</span>
+        <span>[React, three.js]  served from Cloudflare</span>
       </footer>
     </>
   )
