@@ -184,9 +184,21 @@ function App() {
               <br />
               <span className="hero-word inline-block">Ronin<span className="baseline-probe" /></span>
             </h1>
-            <p className="mt-8 max-w-[38ch] text-xl leading-snug">
-              Killswitch guy
-            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-4">
+              <p className="max-w-[38ch] text-xl leading-snug">
+                Killswitch guy on perma PTO
+              </p>
+              <a
+                href="https://ko-fi.com/cat_ronin"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Support Cat Ronin on Ko-fi"
+                className="inline-flex shrink-0 rounded-md bg-white p-1 no-underline transition-transform hover:-translate-y-0.5"
+              >
+                <img src="/ko-fi-cup.png" width="161" height="130" className="h-7 w-auto"
+                  alt="Support Cat Ronin on Ko-fi" />
+              </a>
+            </div>
           </div>
           <figure ref={art} className="hero-art m-0 lg:col-span-7">
             <div className="photo-frame photo-frame--hero">
@@ -231,13 +243,13 @@ function App() {
                 <span className="font-display block text-[clamp(3rem,8vw,6.5rem)] font-bold uppercase leading-none underline decoration-accent decoration-4 underline-offset-8">Orbius</span>
                 <div className="mt-2">
                   <span className="text-sm font-bold">
-                    Nov 21 2026
+                    Nov 22 2026 10:45PM
                   </span>
                   <span>
                     &nbsp;-&nbsp;
                   </span>
                   <span className="text-sm">
-                    Added pre-made collections and scenes
+                    Added pre-made collections and scenes. Trying out new dial controls.
                   </span>
                 </div>
                 <span className="mt-4 block text-lg text-muted">
