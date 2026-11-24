@@ -8,9 +8,7 @@ import './home.css'
 const SPECIMENS = [
   { slug: 'coral-reliquary', name: 'Coral reliquary', note: 'A glass dodecahedron holding something that looks alive.' },
   { slug: 'bloom-orb', name: 'Bloom', note: 'Thin-film ribbons wrapped around a clear orb.' },
-  { slug: 'sea-glass', name: 'Sea glass', note: 'Frosted green glass, scratched like it spent years in the surf.' },
-  { slug: 'ember-orbit', name: 'Ember orbit', note: 'Gold particle trails circling a bright core.' },
-  { slug: 'nudibranch', name: 'Nudibranch', note: 'A sea slug made of coloured particles, drifting in the dark.' },
+  { slug: 'audio-reactive-beach-boys', name: 'Beach Boys', note: 'Visuals that move with a Beach Boys track.' },
 ]
 
 // The companion's compass in the hero illustration: the night opens from here.
