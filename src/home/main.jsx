@@ -263,13 +263,13 @@ function App() {
                 <span className="font-display block text-[clamp(3rem,8vw,6.5rem)] font-bold uppercase leading-none underline decoration-accent decoration-4 underline-offset-8">Tumbler</span>
                 <div className="mt-2">
                   <span className="text-sm font-bold">
-                    0.9.0 Nov 23 2026
+                    0.10.0 Nov 23 2026
                   </span>
                   <span>
                     &nbsp;-&nbsp;
                   </span>
                   <span className="mt-4 text-sm">
-                    Parakite barrel rolls. Flight tutorial added. Uplifted water bodies.
+                    Parakite barrel rolls. Flight tutorial added. New lake. New map.
                   </span>
                 </div>
                 <span className="mt-4 block text-lg text-muted">
