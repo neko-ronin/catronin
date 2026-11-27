@@ -261,7 +261,7 @@ function App() {
                 <span className="font-display block text-[clamp(3rem,8vw,6.5rem)] font-bold uppercase leading-none underline decoration-accent decoration-4 underline-offset-8">Tumbler</span>
                 <div className="mt-2">
                   <span className="text-sm font-bold">
-                    0.10.0 Nov 23 2026
+                    0.11.0 Nov 26 2026
                   </span>
                   <span>
                     &nbsp;-&nbsp;
@@ -271,7 +271,7 @@ function App() {
                   </span>
                 </div>
                 <span className="mt-4 block text-lg text-muted">
-                  3D demo of a glacial valley serving as a vehicle for agentic software development. Make space, it eats up RAM and GPU. It's not a game but you can climb trees, roll down hills, speedfly via para-kite/glider. Idle freedoms will coalesce into structured gameplay in time. Workflow details will be written up later. An article on cloud development is linked below per someone's inquiry from social media.
+                  3D demo of a glacial valley serving as a vehicle for agentic software development. Make space, it eats up RAM and GPU. It's not a game but you can climb trees, roll down hills, speedfly via paraglider. Idle freedoms will coalesce into structured gameplay in time. Workflow details will be written up later. An article on cloud development is linked below per someone's inquiry from social media.
                 </span>
               </a>
             )}
